@@ -88,33 +88,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const loadData = async () => {
-      const stored = storage.getData();
-      
-      const defaultUsers: User[] = [
-        { id: 'user1', name: 'Ibrahem', email: 'ibrahem@compass.inc', role: 'frontend', status: 'online', avatar: 'https://i.pravatar.cc/150?u=user1' },
-        { id: 'user2', name: 'Khaled Osama', email: 'khaled.o@compass.inc', role: 'backend', status: 'online', avatar: 'https://i.pravatar.cc/150?u=user2' },
-        { id: 'user3', name: 'Khaled Mohamed', email: 'khaled.m@compass.inc', role: 'frontend', status: 'break', avatar: 'https://i.pravatar.cc/150?u=user3' },
-        { id: 'user4', name: 'Naroz', email: 'naroz@compass.inc', role: 'backend', status: 'off', avatar: 'https://i.pravatar.cc/150?u=user4' },
-        { id: 'user5', name: 'Milad', email: 'milad@compass.inc', role: 'frontend', status: 'online', isBlocked: true, blockerReason: "Waiting for API specs", avatar: 'https://i.pravatar.cc/150?u=user5' },
-      ];
-
-      const defaultOrgs: Organization[] = [
-        { id: 'org1', name: 'Palm Hills', isActive: true, features: { leads: true, reservations: true, eois: false, brokerages: true, ticketing: true, analytics: true }, createdAt: Date.now() },
-        { id: 'org2', name: 'TMG View', isActive: true, features: { leads: true, reservations: false, eois: true, brokerages: false, ticketing: true, analytics: false }, createdAt: Date.now() },
-        { id: 'org3', name: 'Mountain View', isActive: true, features: { leads: true, reservations: true, eois: true, brokerages: true, ticketing: true, analytics: true }, createdAt: Date.now() },
-        { id: 'org4', name: 'Ora Developers', isActive: false, features: { leads: false, reservations: false, eois: false, brokerages: false, ticketing: false, analytics: false }, createdAt: Date.now() },
-        { id: 'org5', name: 'SODIC', isActive: true, features: { leads: true, reservations: true, eois: false, brokerages: false, ticketing: true, analytics: true }, createdAt: Date.now() },
-      ];
-
+      const stored = await storage.fetchAll();
       setData({
-        ideas: stored.ideas?.length ? stored.ideas : [],
-        requirements: stored.requirements?.length ? stored.requirements : [],
-        bugs: stored.bugs?.length ? stored.bugs : [],
-        tickets: [],
-        sprints: [],
-        shippedTickets: [],
-        users: stored.users?.length ? stored.users : defaultUsers,
-        organizations: stored.organizations?.length ? stored.organizations : defaultOrgs,
+        ideas: stored.ideas || [],
+        requirements: stored.requirements || [],
+        bugs: stored.bugs || [],
+        tickets: stored.tickets || [],
+        sprints: stored.sprints || [],
+        shippedTickets: stored.shippedTickets || [],
+        users: stored.users || [],
+        organizations: stored.organizations || [],
         standupHistory: stored.standupHistory || [],
         notifications: stored.notifications || []
       });
