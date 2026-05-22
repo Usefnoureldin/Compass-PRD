@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap'); text { font-family: 'Inter', sans-serif; }</style>
+
+        <rect width="512" height="512" rx="112" fill="#1a1a2e" />
+        <g transform="translate(128, 128) scale(8)">
+    <!-- Vertical Pillars -->
+    <path d="M8 6 L8 26" stroke="#00BCD4" stroke-width="3" stroke-linecap="round" />
+    <path d="M24 6 L24 26" stroke="#00BCD4" stroke-width="3" stroke-linecap="round" />
+    
+    <!-- Upward Arc Bridge -->
+    <path d="M8 18 Q 16 8 24 18" stroke="#00BCD4" stroke-width="3" stroke-linecap="round" fill="none" />
+    
+    <!-- Corner Nodes -->
+    <circle cx="8" cy="6" r="3" fill="#00BCD4" />
+    <circle cx="8" cy="26" r="3" fill="#00BCD4" />
+    <circle cx="24" cy="6" r="3" fill="#00BCD4" />
+    <circle cx="24" cy="26" r="3" fill="#00BCD4" />
+    
+    <!-- Center Node -->
+    <circle cx="16" cy="13" r="3" fill="#F5A623" />
+  </g>
+      
+</svg>

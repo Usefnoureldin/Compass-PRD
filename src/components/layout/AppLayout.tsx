@@ -49,8 +49,8 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
       {/* ... keeping the same ... */}
       {/* slide 48-64 same */}
       <div className="md:hidden flex items-center justify-between p-4 border-b bg-card z-20 shrink-0">
-        <div className="flex items-center gap-2 font-bold text-xl text-primary">
-          <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">C</div>
+        <div className="flex items-center gap-2 font-bold text-xl text-foreground">
+          <img src="/brand/logos/logomark/hostbase-logomark-full-color.svg" alt="Hostbase" className="w-8 h-8" />
           Compass
         </div>
         <div className="flex items-center gap-2">
@@ -84,7 +84,7 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
             {/* Added User part to mobile menu for consistency */}
             <div className="mt-auto border-t p-3 pb-6 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 shrink-0"></div>
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-teal-700 shrink-0"></div>
                 <div className="flex flex-col leading-tight">
                   <span className="text-[13px] font-medium">Workspace</span>
                   <span className="text-[9px] text-muted-foreground">Founder</span>
@@ -113,9 +113,9 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
             {isCollapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
           </button>
 
-          <div className="flex items-center font-bold text-xl text-primary mb-6 overflow-hidden shrink-0 h-8">
+          <div className="flex items-center font-bold text-xl text-foreground mb-6 overflow-hidden shrink-0 h-8">
             <div className="w-12 shrink-0 flex items-center justify-center">
-              <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center bg-gradient-to-br from-primary to-amber-400 shrink-0">C</div>
+              <img src="/brand/logos/logomark/hostbase-logomark-full-color.svg" alt="Hostbase" className="w-8 h-8" />
             </div>
             <AnimatePresence>
               {!isCollapsed && (
@@ -210,7 +210,7 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
           <div className="mt-auto border-t -mx-4 px-4 -mb-4 py-3">
             <div className="flex items-center">
               <div className="w-12 shrink-0 flex items-center justify-center">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 shrink-0 shadow-sm"></div>
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-teal-700 shrink-0 shadow-sm"></div>
               </div>
 
               <AnimatePresence>

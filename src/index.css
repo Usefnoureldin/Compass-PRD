@@ -60,48 +60,54 @@ body[style*="overflow: hidden"],
 }
 
 :root {
-  --background: hsl(0 0% 98%);
-  --foreground: hsl(240 10% 3.9%);
+  /* Hostbase brand — light mode
+     bg Off White #F8FAFC · card White · fg Charcoal #1E293B
+     primary Primary Teal #0097A7 · muted-fg Slate #475569
+     border Light Gray #E2E8F0 · accent Amber #F5A623 (sparingly) */
+  --background: hsl(210 40% 98%);
+  --foreground: hsl(217 33% 17%);
   --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 3.9%);
+  --card-foreground: hsl(217 33% 17%);
   --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 3.9%);
-  --primary: hsl(45 93% 47%);
-  --primary-foreground: hsl(240 10% 3.9%);
-  --secondary: hsl(240 4.8% 95.9%);
-  --secondary-foreground: hsl(240 5.9% 10%);
-  --muted: hsl(240 4.8% 95.9%);
-  --muted-foreground: hsl(240 3.8% 46.1%);
-  --accent: hsl(240 4.8% 95.9%);
-  --accent-foreground: hsl(240 5.9% 10%);
+  --popover-foreground: hsl(217 33% 17%);
+  --primary: hsl(186 100% 33%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(214 32% 91%);
+  --secondary-foreground: hsl(217 33% 17%);
+  --muted: hsl(214 32% 94%);
+  --muted-foreground: hsl(215 19% 35%);
+  --accent: hsl(36 91% 55%);
+  --accent-foreground: hsl(217 33% 17%);
   --destructive: hsl(0 84.2% 60.2%);
   --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 5.9% 90%);
-  --input: hsl(240 5.9% 90%);
-  --ring: hsl(45 93% 47%);
+  --border: hsl(214 32% 91%);
+  --input: hsl(214 32% 91%);
+  --ring: hsl(186 100% 33%);
   --radius: 0.75rem;
 }
 
 .dark {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 5% 13%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 5% 13%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(45 93% 47%);
-  --primary-foreground: hsl(240 10% 3.9%);
-  --secondary: hsl(240 3.7% 12%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 12%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 12%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
+  /* Hostbase brand — dark mode
+     bg Dark Navy #1a1a2e · primary Bright Teal #00BCD4 */
+  --background: hsl(240 28% 14%);
+  --foreground: hsl(210 40% 98%);
+  --card: hsl(240 24% 18%);
+  --card-foreground: hsl(210 40% 98%);
+  --popover: hsl(240 24% 18%);
+  --popover-foreground: hsl(210 40% 98%);
+  --primary: hsl(187 100% 42%);
+  --primary-foreground: hsl(240 28% 14%);
+  --secondary: hsl(240 20% 22%);
+  --secondary-foreground: hsl(210 40% 98%);
+  --muted: hsl(240 20% 22%);
+  --muted-foreground: hsl(218 11% 65%);
+  --accent: hsl(36 91% 55%);
+  --accent-foreground: hsl(240 28% 14%);
+  --destructive: hsl(0 62.8% 50%);
   --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 3.7% 26%);
-  --input: hsl(240 3.7% 26%);
-  --ring: hsl(45 93% 47%);
+  --border: hsl(240 18% 28%);
+  --input: hsl(240 18% 28%);
+  --ring: hsl(187 100% 42%);
 }
 
 * {
