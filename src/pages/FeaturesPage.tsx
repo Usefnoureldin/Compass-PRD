@@ -235,13 +235,14 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onC
           <div className="font-semibold text-sm line-clamp-2 flex-1">{feature.title}</div>
           <div
             className={cn(
-              "shrink-0 text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded-md",
+              "shrink-0 text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md flex items-baseline gap-1.5",
               done === total
                 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                 : "bg-primary/10 text-primary"
             )}
           >
-            {done}/{total}
+            <span>{done}/{total}</span>
+            <span className="text-[10px] font-medium opacity-80">{pct}%</span>
           </div>
         </div>
 
