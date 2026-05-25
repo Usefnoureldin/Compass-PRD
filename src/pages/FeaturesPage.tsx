@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageToolbar } from "@/components/layout/PageToolbar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FeatureDetailModal } from "@/components/features/FeatureDetailModal";
-import { ChecklistModal, ChecklistProgressChip } from "@/components/features/ChecklistModal";
 import {
   Plus,
   Sparkles,
@@ -60,7 +59,6 @@ export const FeaturesPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [checklistId, setChecklistId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -87,7 +85,6 @@ export const FeaturesPage: React.FC = () => {
   }, [filtered]);
 
   const selected = selectedId ? data.features.find((f) => f.id === selectedId) ?? null : null;
-  const checklistFeature = checklistId ? data.features.find((f) => f.id === checklistId) ?? null : null;
 
   const attachmentsByFeature = useMemo(() => {
     const map = new Map<string, number>();
@@ -182,7 +179,6 @@ export const FeaturesPage: React.FC = () => {
                                     feature={feature}
                                     attachmentCount={attachmentsByFeature.get(feature.id) ?? 0}
                                     onClick={() => setSelectedId(feature.id)}
-                                    onOpenChecklist={() => setChecklistId(feature.id)}
                                   />
                                 </div>
                               )}
@@ -202,7 +198,6 @@ export const FeaturesPage: React.FC = () => {
 
       <NewFeatureModal isOpen={createOpen} onClose={() => setCreateOpen(false)} onCreated={(id) => setSelectedId(id)} />
       <FeatureDetailModal feature={selected} isOpen={!!selected} onClose={() => setSelectedId(null)} />
-      <ChecklistModal feature={checklistFeature} isOpen={!!checklistFeature} onClose={() => setChecklistId(null)} />
     </>
   );
 };
@@ -211,10 +206,9 @@ interface FeatureCardProps {
   feature: Feature;
   attachmentCount: number;
   onClick: () => void;
-  onOpenChecklist: () => void;
 }
 
-const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onClick, onOpenChecklist }) => {
+const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onClick }) => {
   const { data, actions } = useData();
   const owner = data.users.find((u) => u.id === feature.ownerId);
   const org = data.organizations.find((o) => o.id === feature.orgId);
@@ -227,7 +221,8 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onC
 
   const isBuilding = feature.status === "building";
 
-  // Building cards: show inline checklist. Other statuses: compact card with chip only.
+  // Building cards show inline checklist + progress bar.
+  // All other status cards stay compact — no checklist UI.
   if (isBuilding && total > 0) {
     return (
       <motion.div
@@ -238,7 +233,9 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onC
       >
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="font-semibold text-sm line-clamp-2 flex-1">{feature.title}</div>
-          <ChecklistProgressChip feature={feature} onClick={onOpenChecklist} />
+          <div className="shrink-0 text-[10px] font-medium text-muted-foreground tabular-nums">
+            {done}/{total}
+          </div>
         </div>
 
         {/* Progress bar */}
@@ -291,10 +288,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onC
       whileHover={{ y: -1 }}
       className="cursor-pointer w-full text-left bg-card border border-border/40 rounded-xl p-3 hover:border-primary/40 hover:shadow-sm transition-all"
     >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="font-semibold text-sm line-clamp-2 flex-1">{feature.title}</div>
-        <ChecklistProgressChip feature={feature} onClick={onOpenChecklist} />
-      </div>
+      <div className="font-semibold text-sm line-clamp-2 mb-1">{feature.title}</div>
       {feature.description && (
         <div className="text-xs text-muted-foreground line-clamp-2 mb-2">{feature.description}</div>
       )}
