@@ -34,14 +34,14 @@ const STATUS_META: Record<
     tint: "text-blue-500 bg-blue-500/10",
     emptyHint:
       "Create a feature here. Drop a .md to bootstrap the PRD, then drag to Building when work starts.",
-    colSpan: "lg:col-span-2",
+    colSpan: "lg:col-span-1",
   },
   building: {
     label: "Building",
     icon: Hammer,
     tint: "text-primary bg-primary/10",
     emptyHint: "Drag features here when development kicks off.",
-    colSpan: "lg:col-span-1",
+    colSpan: "lg:col-span-2",
   },
   shipped: {
     label: "Shipped",
