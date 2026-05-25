@@ -1,13 +1,19 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { CompassData, Idea, Ticket, User, Requirement, Organization, ActivityEvent, StandupReport, Notification as AppNotification, Sprint, Bug } from '../types';
+import { CompassData, Idea, Ticket, User, Requirement, Organization, ActivityEvent, StandupReport, Notification as AppNotification, Sprint, Bug, Feature, FeatureAttachment } from '../types';
 import { storage } from '../services/storage';
+import { toggleChecklistKey } from '@/lib/checklist';
 import { v4 as uuidv4 } from 'uuid';
 
+
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface DataContextType {
   data: CompassData;
   activityLog: ActivityEvent[];
   isLoading: boolean;
+  saveStatus: SaveStatus;
+  saveError: string | null;
+  retrySave: () => void;
   actions: {
     addIdea: (idea: Omit<Idea, 'id' | 'createdAt' | 'updatedAt' | 'status' | 'order'>) => void;
     updateIdea: (id: string, updates: Partial<Idea>) => void;
@@ -65,6 +71,16 @@ interface DataContextType {
     addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp' | 'isRead'>) => void;
     markNotificationAsRead: (id: string) => void;
     markAllNotificationsAsRead: () => void;
+
+    // Features
+    addFeature: (feature: Omit<Feature, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'prdChecklistState'>) => string;
+    updateFeature: (id: string, updates: Partial<Feature>) => void;
+    deleteFeature: (id: string) => void;
+    reorderFeatures: (status: Feature['status'], startIndex: number, endIndex: number) => void;
+    moveFeature: (featureId: string, toStatus: Feature['status'], toIndex: number) => void;
+    toggleChecklistItem: (featureId: string, key: string) => void;
+    uploadFeatureAttachment: (featureId: string, file: File, options?: { setAsPrd?: boolean }) => Promise<FeatureAttachment>;
+    deleteFeatureAttachment: (attachmentId: string) => Promise<void>;
   };
 }
 
@@ -81,10 +97,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     users: [],
     organizations: [],
     standupHistory: [],
-    notifications: []
+    notifications: [],
+    features: [],
+    featureAttachments: []
   });
   const [activityLog, setActivityLog] = useState<ActivityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const savedTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -99,19 +120,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         users: stored.users || [],
         organizations: stored.organizations || [],
         standupHistory: stored.standupHistory || [],
-        notifications: stored.notifications || []
+        notifications: stored.notifications || [],
+        features: stored.features || [],
+        featureAttachments: stored.featureAttachments || []
       });
       setIsLoading(false);
     };
     loadData();
   }, []);
 
-  // Persist on change
-  useEffect(() => {
-    if (!isLoading) {
-      storage.saveAll(data);
+  // Persist on change — every state change writes straight to Supabase.
+  // Errors surface via saveStatus so they're never silent.
+  const persist = React.useCallback(async (snapshot: CompassData) => {
+    setSaveStatus('saving');
+    setSaveError(null);
+    try {
+      await storage.saveAll(snapshot);
+      setSaveStatus('saved');
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+      savedTimer.current = setTimeout(() => setSaveStatus('idle'), 1500);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[DataContext.saveAll] failed:', err);
+      setSaveError(msg);
+      setSaveStatus('error');
     }
-  }, [data, isLoading]);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading) persist(data);
+  }, [data, isLoading, persist]);
+
+  const retrySave = React.useCallback(() => {
+    persist(data);
+  }, [data, persist]);
 
   const saveData = (newData: CompassData) => {
     setData(newData);
@@ -363,11 +405,159 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveStandupReport: (report: Omit<StandupReport, 'id'>) => {
         const newReport: StandupReport = { ...report, id: uuidv4() };
         saveData({ ...data, standupHistory: [newReport, ...data.standupHistory] });
+    },
+
+    // Features
+    addFeature: (feature: Omit<Feature, 'id' | 'createdAt' | 'updatedAt' | 'order' | 'prdChecklistState'>): string => {
+        const id = uuidv4();
+        const newFeature: Feature = {
+            ...feature,
+            id,
+            prdChecklistState: [],
+            order: data.features.length,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+        };
+        saveData({ ...data, features: [newFeature, ...data.features] });
+        return id;
+    },
+
+    toggleChecklistItem: (featureId: string, key: string) => {
+        const feature = data.features.find(f => f.id === featureId);
+        if (!feature) return;
+        const nextState = toggleChecklistKey(feature, key);
+        const updated = data.features.map(f =>
+            f.id === featureId
+                ? { ...f, prdChecklistState: nextState, updatedAt: Date.now() }
+                : f
+        );
+        saveData({ ...data, features: updated });
+    },
+
+    updateFeature: (id: string, updates: Partial<Feature>) => {
+        const updated = data.features.map(f =>
+            f.id === id ? { ...f, ...updates, updatedAt: Date.now() } : f
+        );
+        saveData({ ...data, features: updated });
+    },
+
+    deleteFeature: (id: string) => {
+        // Drop attachment rows for this feature; storage files are cleaned up best-effort.
+        const orphanFiles = data.featureAttachments
+            .filter(a => a.featureId === id)
+            .map(a => a.filePath);
+        if (orphanFiles.length > 0) {
+            storage.deleteAttachmentFile(orphanFiles[0]).catch(() => {});
+            // Fire-and-forget cleanup for the rest.
+            orphanFiles.slice(1).forEach(p => {
+                storage.deleteAttachmentFile(p).catch(() => {});
+            });
+        }
+        saveData({
+            ...data,
+            features: data.features.filter(f => f.id !== id),
+            featureAttachments: data.featureAttachments.filter(a => a.featureId !== id),
+        });
+    },
+
+    reorderFeatures: (status: Feature['status'], startIndex: number, endIndex: number) => {
+        const inStatus = data.features.filter(f => f.status === status).sort((a, b) => a.order - b.order);
+        const others = data.features.filter(f => f.status !== status);
+        const [removed] = inStatus.splice(startIndex, 1);
+        inStatus.splice(endIndex, 0, removed);
+        const reindexed = inStatus.map((f, i) => ({ ...f, order: i }));
+        saveData({ ...data, features: [...others, ...reindexed] });
+    },
+
+    moveFeature: (featureId: string, toStatus: Feature['status'], toIndex: number) => {
+        const feature = data.features.find(f => f.id === featureId);
+        if (!feature) return;
+        const fromStatus = feature.status;
+
+        if (fromStatus === toStatus) {
+            const inCol = data.features.filter(f => f.status === toStatus).sort((a, b) => a.order - b.order);
+            const fromIndex = inCol.findIndex(f => f.id === featureId);
+            if (fromIndex === -1 || fromIndex === toIndex) return;
+            const [removed] = inCol.splice(fromIndex, 1);
+            inCol.splice(toIndex, 0, removed);
+            const reindexed = inCol.map((f, i) => ({ ...f, order: i }));
+            const others = data.features.filter(f => f.status !== toStatus);
+            saveData({ ...data, features: [...others, ...reindexed] });
+            return;
+        }
+
+        // Cross-column: change status and reindex both columns.
+        const destCol = data.features
+            .filter(f => f.status === toStatus)
+            .sort((a, b) => a.order - b.order);
+        const movedFeature: Feature = { ...feature, status: toStatus, updatedAt: Date.now() };
+        destCol.splice(toIndex, 0, movedFeature);
+        const destReindexed = destCol.map((f, i) => ({ ...f, order: i }));
+
+        const srcReindexed = data.features
+            .filter(f => f.status === fromStatus && f.id !== featureId)
+            .sort((a, b) => a.order - b.order)
+            .map((f, i) => ({ ...f, order: i }));
+
+        const others = data.features.filter(f => f.status !== fromStatus && f.status !== toStatus);
+        saveData({ ...data, features: [...others, ...srcReindexed, ...destReindexed] });
+    },
+
+    uploadFeatureAttachment: async (
+        featureId: string,
+        file: File,
+        options?: { setAsPrd?: boolean }
+    ): Promise<FeatureAttachment> => {
+        const { filePath, fileType, fileSize, fileName } = await storage.uploadAttachment(featureId, file);
+        const attachment: FeatureAttachment = {
+            id: uuidv4(),
+            featureId,
+            fileName,
+            filePath,
+            fileType,
+            fileSize,
+            uploadedAt: Date.now(),
+        };
+
+        // Optionally read .md content straight into the feature's PRD body.
+        let prdUpdate: Partial<Feature> | null = null;
+        if (options?.setAsPrd && fileType === 'md') {
+            try {
+                const text = await file.text();
+                prdUpdate = { prdMarkdown: text, updatedAt: Date.now() };
+            } catch {
+                /* ignore — attachment still saved */
+            }
+        }
+
+        setData(prev => ({
+            ...prev,
+            featureAttachments: [attachment, ...prev.featureAttachments],
+            features: prdUpdate
+                ? prev.features.map(f => (f.id === featureId ? { ...f, ...prdUpdate! } : f))
+                : prev.features,
+        }));
+
+        return attachment;
+    },
+
+    deleteFeatureAttachment: async (attachmentId: string): Promise<void> => {
+        const attachment = data.featureAttachments.find(a => a.id === attachmentId);
+        if (!attachment) return;
+        try {
+            await storage.deleteAttachmentFile(attachment.filePath);
+        } catch (err) {
+            console.warn('[deleteFeatureAttachment] storage cleanup failed:', err);
+        }
+        setData(prev => ({
+            ...prev,
+            featureAttachments: prev.featureAttachments.filter(a => a.id !== attachmentId),
+        }));
     }
   };
 
   return (
-    <DataContext.Provider value={{ data, isLoading, activityLog, actions }}>
+    <DataContext.Provider value={{ data, isLoading, activityLog, saveStatus, saveError, retrySave, actions }}>
       {children}
     </DataContext.Provider>
   );

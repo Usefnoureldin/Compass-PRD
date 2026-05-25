@@ -151,6 +151,53 @@ export interface Organization {
   createdAt: number;
 }
 
+export type FeatureStatus = 'planned' | 'building' | 'shipped';
+
+/** Persisted overlay — completion state by stable key. */
+export interface ChecklistState {
+  key: string;
+  isDone: boolean;
+  completedAt?: number;
+}
+
+/** Hydrated row used by the UI — parsed item + overlay state. */
+export interface ChecklistItem {
+  key: string;
+  text: string;
+  kind: 'heading' | 'checklist';
+  headingLevel?: number;
+  /** Nesting level for bullet items, 0 = top-level. */
+  indent?: number;
+  order: number;
+  isDone: boolean;
+  completedAt?: number;
+}
+
+export interface FeatureAttachment {
+  id: string;
+  featureId: string;
+  fileName: string;
+  filePath: string; // storage path inside the `compass-prds` bucket
+  fileType: 'md' | 'pdf';
+  fileSize: number;
+  uploadedAt: number;
+}
+
+export interface Feature {
+  id: string;
+  title: string;
+  description: string;
+  status: FeatureStatus;
+  ownerId?: string;
+  orgId?: string;
+  sprintId?: string;
+  prdMarkdown: string;
+  prdChecklistState: ChecklistState[];
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface CompassData {
   ideas: Idea[];
   requirements: Requirement[];
@@ -159,6 +206,8 @@ export interface CompassData {
   sprints: Sprint[];
   users: User[];
   organizations: Organization[];
+  features: Feature[];
+  featureAttachments: FeatureAttachment[];
   shippedTickets: Ticket[]; // Archive
   standupHistory: StandupReport[];
   notifications: Notification[];

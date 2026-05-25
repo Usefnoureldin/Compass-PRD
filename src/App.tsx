@@ -13,6 +13,7 @@ import { DesignDecisionsPage } from './pages/DesignDecisionsPage';
 import { OrganizationsPage } from './pages/OrganizationsPage';
 import { TeamBoard } from './pages/TeamBoard';
 import { BugsPage } from './pages/BugsPage';
+import { FeaturesPage } from './pages/FeaturesPage';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <AppLayout>
             <Routes>
               <Route path="/" element={<TeamBoard />} />
+              <Route path="/features" element={<FeaturesPage />} />
               <Route path="/ideas" element={<IdeasBoard />} />
               <Route path="/sprints" element={<BacklogPage />} />
               <Route path="/tickets" element={<TicketsBoard />} />

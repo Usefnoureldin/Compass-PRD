@@ -10,6 +10,8 @@ import type {
   Organization,
   Notification as AppNotification,
   StandupReport,
+  Feature,
+  FeatureAttachment,
 } from '../types';
 
 const EMPTY: CompassData = {
@@ -23,7 +25,11 @@ const EMPTY: CompassData = {
   standupHistory: [],
   notifications: [],
   bugs: [],
+  features: [],
+  featureAttachments: [],
 };
+
+export const PRD_BUCKET = 'compass-prds';
 
 // ---------- Helpers ----------
 const ts = (n: number | undefined): string | undefined =>
@@ -155,6 +161,31 @@ const rowToNotification = (r: any): AppNotification => ({
   timestamp: msFrom(r.created_at),
 });
 
+const rowToFeature = (r: any): Feature => ({
+  id: r.id,
+  title: r.title,
+  description: r.description ?? '',
+  status: r.status,
+  ownerId: r.owner_id ?? undefined,
+  orgId: r.org_id ?? undefined,
+  sprintId: r.sprint_id ?? undefined,
+  prdMarkdown: r.prd_markdown ?? '',
+  prdChecklistState: Array.isArray(r.prd_checklist_state) ? r.prd_checklist_state : [],
+  order: r.order_index,
+  createdAt: msFrom(r.created_at),
+  updatedAt: msFrom(r.updated_at),
+});
+
+const rowToFeatureAttachment = (r: any): FeatureAttachment => ({
+  id: r.id,
+  featureId: r.feature_id,
+  fileName: r.file_name,
+  filePath: r.file_path,
+  fileType: r.file_type,
+  fileSize: r.file_size ?? 0,
+  uploadedAt: msFrom(r.uploaded_at),
+});
+
 const rowToStandup = (r: any): StandupReport => ({
   id: r.id,
   date: msFrom(r.date),
@@ -284,6 +315,33 @@ const notificationToRow = (n: AppNotification) =>
     created_at: ts(n.timestamp),
   });
 
+const featureToRow = (f: Feature) =>
+  compact({
+    id: f.id,
+    title: f.title,
+    description: f.description,
+    status: f.status,
+    owner_id: f.ownerId,
+    org_id: f.orgId,
+    sprint_id: f.sprintId,
+    prd_markdown: f.prdMarkdown,
+    prd_checklist_state: f.prdChecklistState ?? [],
+    order_index: f.order,
+    created_at: ts(f.createdAt),
+    updated_at: ts(f.updatedAt),
+  });
+
+const featureAttachmentToRow = (a: FeatureAttachment) =>
+  compact({
+    id: a.id,
+    feature_id: a.featureId,
+    file_name: a.fileName,
+    file_path: a.filePath,
+    file_type: a.fileType,
+    file_size: a.fileSize,
+    uploaded_at: ts(a.uploadedAt),
+  });
+
 const standupToRow = (s: StandupReport) =>
   compact({
     id: s.id,
@@ -329,18 +387,31 @@ async function syncTable<T extends { id: string }>(
 // ---------- Public API ----------
 export const storage = {
   async fetchAll(): Promise<CompassData> {
-    const [orgs, users, ideas, reqs, bugs, tickets, sprints, notifs, standups] =
-      await Promise.all([
-        supabase.from('organizations').select('*'),
-        supabase.from('users').select('*'),
-        supabase.from('ideas').select('*').order('order_index', { ascending: true }),
-        supabase.from('requirements').select('*').order('order_index', { ascending: true }),
-        supabase.from('bugs').select('*').order('order_index', { ascending: true }),
-        supabase.from('tickets').select('*').order('order_index', { ascending: true }),
-        supabase.from('sprints').select('*'),
-        supabase.from('notifications').select('*').order('created_at', { ascending: false }),
-        supabase.from('standup_reports').select('*').order('date', { ascending: false }),
-      ]);
+    const [
+      orgs,
+      users,
+      ideas,
+      reqs,
+      bugs,
+      tickets,
+      sprints,
+      notifs,
+      standups,
+      features,
+      featureAttachments,
+    ] = await Promise.all([
+      supabase.from('organizations').select('*'),
+      supabase.from('users').select('*'),
+      supabase.from('ideas').select('*').order('order_index', { ascending: true }),
+      supabase.from('requirements').select('*').order('order_index', { ascending: true }),
+      supabase.from('bugs').select('*').order('order_index', { ascending: true }),
+      supabase.from('tickets').select('*').order('order_index', { ascending: true }),
+      supabase.from('sprints').select('*'),
+      supabase.from('notifications').select('*').order('created_at', { ascending: false }),
+      supabase.from('standup_reports').select('*').order('date', { ascending: false }),
+      supabase.from('features').select('*').order('order_index', { ascending: true }),
+      supabase.from('feature_attachments').select('*').order('uploaded_at', { ascending: false }),
+    ]);
 
     const firstError =
       orgs.error ||
@@ -351,7 +422,9 @@ export const storage = {
       tickets.error ||
       sprints.error ||
       notifs.error ||
-      standups.error;
+      standups.error ||
+      features.error ||
+      featureAttachments.error;
 
     if (firstError) {
       console.error('[storage.fetchAll] Supabase error:', firstError);
@@ -368,6 +441,8 @@ export const storage = {
       sprints: (sprints.data ?? []).map(rowToSprint),
       notifications: (notifs.data ?? []).map(rowToNotification),
       standupHistory: (standups.data ?? []).map(rowToStandup),
+      features: (features.data ?? []).map(rowToFeature),
+      featureAttachments: (featureAttachments.data ?? []).map(rowToFeatureAttachment),
       shippedTickets: [],
     };
   },
@@ -388,7 +463,54 @@ export const storage = {
       syncTable('tickets', data.tickets, ticketToRow),
       syncTable('notifications', data.notifications, notificationToRow),
       syncTable('standup_reports', data.standupHistory, standupToRow),
+      syncTable('features', data.features, featureToRow),
     ]);
+
+    // Attachments depend on features; sync after.
+    await syncTable('feature_attachments', data.featureAttachments, featureAttachmentToRow);
+  },
+
+  // ---------- File uploads ----------
+  async uploadAttachment(
+    featureId: string,
+    file: File
+  ): Promise<{ filePath: string; fileType: 'md' | 'pdf'; fileSize: number; fileName: string }> {
+    const lower = file.name.toLowerCase();
+    const isMd = lower.endsWith('.md') || file.type === 'text/markdown';
+    const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
+    if (!isMd && !isPdf) {
+      throw new Error(`Unsupported file type. Upload .md or .pdf only.`);
+    }
+    const fileType: 'md' | 'pdf' = isPdf ? 'pdf' : 'md';
+
+    // Sanitize filename for storage path.
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filePath = `${featureId}/${Date.now()}-${safeName}`;
+
+    const { error } = await supabase.storage
+      .from(PRD_BUCKET)
+      .upload(filePath, file, {
+        contentType: isPdf ? 'application/pdf' : 'text/markdown',
+        upsert: false,
+      });
+    if (error) throw new Error(`upload attachment: ${error.message}`);
+
+    return { filePath, fileType, fileSize: file.size, fileName: file.name };
+  },
+
+  async deleteAttachmentFile(filePath: string): Promise<void> {
+    const { error } = await supabase.storage.from(PRD_BUCKET).remove([filePath]);
+    if (error) throw new Error(`delete attachment: ${error.message}`);
+  },
+
+  getAttachmentUrl(filePath: string): string {
+    return supabase.storage.from(PRD_BUCKET).getPublicUrl(filePath).data.publicUrl;
+  },
+
+  async downloadAttachmentText(filePath: string): Promise<string> {
+    const { data, error } = await supabase.storage.from(PRD_BUCKET).download(filePath);
+    if (error) throw new Error(`download attachment: ${error.message}`);
+    return await data.text();
   },
 
   // Kept for legacy callers; both now resolve to the async path.

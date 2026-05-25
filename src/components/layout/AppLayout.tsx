@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Lightbulb, Ticket, CheckCircle2, Rocket, Menu, X, Users, ClipboardList, Palette, Building2, Layers, Bug } from "lucide-react";
+import { LayoutDashboard, Lightbulb, Ticket, CheckCircle2, Rocket, Menu, X, Users, ClipboardList, Palette, Building2, Layers, Bug, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/Button";
 import { ThemeToggle } from "../ui/ThemeToggle";
@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip } from "../ui/Tooltip";
 import { NotificationPopover } from "../notifications/NotificationPopover";
+import { SaveIndicator } from "./SaveIndicator";
 
 interface SidebarProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+    { icon: Sparkles, label: "Features", path: "/features" },
     { icon: Lightbulb, label: "Ideas", path: "/ideas" },
     { icon: ClipboardList, label: "Client Requirements", path: "/requirements" },
     { icon: Bug, label: "Bug Tracker", path: "/bugs" },
@@ -255,6 +257,8 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
           {children}
         </div>
       </main>
+
+      <SaveIndicator />
     </div>
   );
 };
