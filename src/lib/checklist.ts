@@ -7,6 +7,28 @@ interface ParsedItem {
   indent?: number;
 }
 
+/**
+ * Strip common inline markdown so the displayed text reads as prose:
+ *   **bold** / __bold__         → bold
+ *   *italic* / _italic_         → italic
+ *   `code`                      → code
+ *   [text](url) / [text][ref]   → text
+ *   ![alt](url)                 → alt
+ * Leaves the underlying markdown body untouched.
+ */
+const stripInlineMarkdown = (s: string): string =>
+  s
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1") // images
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links
+    .replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1") // ref-links
+    .replace(/`([^`]+)`/g, "$1") // inline code
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // **bold**
+    .replace(/__([^_]+)__/g, "$1") // __bold__
+    .replace(/(^|[^*])\*([^*]+)\*/g, "$1$2") // *italic*
+    .replace(/(^|[^_])_([^_]+)_/g, "$1$2") // _italic_
+    .replace(/\s+/g, " ")
+    .trim();
+
 const normalizeText = (s: string): string =>
   s.trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -43,10 +65,12 @@ export function parsePrdItems(markdown: string): ParsedItem[] {
     if (inFence) continue;
 
     // Heading: leading hashes (1-6), at least one space, then text.
+    // Skip H1 — the document title is not actionable.
     const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
     if (heading) {
       const level = heading[1].length;
-      const text = heading[2].replace(/\s*#+\s*$/, "").trim();
+      if (level === 1) continue;
+      const text = stripInlineMarkdown(heading[2].replace(/\s*#+\s*$/, ""));
       if (text) items.push({ kind: "heading", headingLevel: level, text });
       continue;
     }
@@ -55,7 +79,7 @@ export function parsePrdItems(markdown: string): ParsedItem[] {
     const bullet = line.match(/^(\s*)[-*+]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/);
     if (bullet) {
       const indent = Math.min(6, Math.floor(bullet[1].length / 2));
-      const text = bullet[2].trim();
+      const text = stripInlineMarkdown(bullet[2]);
       if (text) items.push({ kind: "checklist", text, indent });
       continue;
     }
@@ -64,7 +88,7 @@ export function parsePrdItems(markdown: string): ParsedItem[] {
     const numbered = line.match(/^(\s*)\d+[.)]\s+(.+?)\s*$/);
     if (numbered) {
       const indent = Math.min(6, Math.floor(numbered[1].length / 2));
-      const text = numbered[2].trim();
+      const text = stripInlineMarkdown(numbered[2]);
       if (text) items.push({ kind: "checklist", text, indent });
     }
   }
