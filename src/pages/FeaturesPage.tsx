@@ -253,18 +253,23 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onC
           />
         </div>
 
-        {/* Inline checklist */}
+        {/* Inline checklist — fade-out at the bottom hints at scrollable overflow */}
         <div
-          className="max-h-72 overflow-y-auto -mx-1 px-1 py-1 space-y-0.5 rounded-md"
+          className="relative -mx-1 rounded-md"
           onClick={(e) => e.stopPropagation()}
         >
-          {items.map((item) => (
-            <InlineChecklistRow
-              key={item.key}
-              item={item}
-              onToggle={() => actions.toggleChecklistItem(feature.id, item.key)}
-            />
-          ))}
+          <div className="max-h-[28rem] overflow-y-auto px-1 py-1 space-y-0.5 [scrollbar-width:thin]">
+            {items.map((item) => (
+              <InlineChecklistRow
+                key={item.key}
+                item={item}
+                onToggle={() => actions.toggleChecklistItem(feature.id, item.key)}
+              />
+            ))}
+          </div>
+          {items.length > 10 && (
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-card to-transparent rounded-b-md" />
+          )}
         </div>
 
         {/* Footer metadata */}
