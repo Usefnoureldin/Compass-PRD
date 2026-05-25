@@ -212,6 +212,10 @@ export function checklistProgress(feature: Feature): { done: number; total: numb
 /**
  * Toggle a key in the overlay; drops stale entries that no longer match any
  * parsed item so the state array doesn't grow unbounded.
+ *
+ * When the toggled key is a heading, every descendant (sub-headings + tasks
+ * up to the next heading of equal or higher level) is set to the same state.
+ * That makes "tick 0.B" mean "tick everything under 0.B."
  */
 export function toggleChecklistKey(
   feature: Feature,
@@ -224,15 +228,38 @@ export function toggleChecklistKey(
     if (validKeys.has(s.key)) current.set(s.key, s);
   }
 
-  const existing = current.get(key);
-  const next: ChecklistState = existing
-    ? {
-        key,
-        isDone: !existing.isDone,
-        completedAt: !existing.isDone ? Date.now() : undefined,
+  const targetIndex = items.findIndex((i) => i.key === key);
+  if (targetIndex === -1) {
+    // Stale key — just compact the overlay.
+    return Array.from(current.values());
+  }
+  const target = items[targetIndex];
+  const newDone = !target.isDone;
+  const now = Date.now();
+
+  // Keys to mutate: the target, plus all descendants if it's a heading.
+  const keysToUpdate: string[] = [target.key];
+
+  if (target.kind === "heading") {
+    const targetLevel = target.headingLevel ?? 99;
+    for (let i = targetIndex + 1; i < items.length; i++) {
+      const it = items[i];
+      // Break out of the section when we hit another heading at the same
+      // or shallower level (i.e. a sibling or ancestor section).
+      if (it.kind === "heading" && (it.headingLevel ?? 99) <= targetLevel) {
+        break;
       }
-    : { key, isDone: true, completedAt: Date.now() };
-  current.set(key, next);
+      keysToUpdate.push(it.key);
+    }
+  }
+
+  for (const k of keysToUpdate) {
+    current.set(k, {
+      key: k,
+      isDone: newDone,
+      completedAt: newDone ? now : undefined,
+    });
+  }
 
   return Array.from(current.values());
 }
