@@ -168,6 +168,10 @@ export interface ChecklistItem {
   headingLevel?: number;
   /** Nesting level for bullet items, 0 = top-level. */
   indent?: number;
+  /** Optional task identifier (e.g. "0.A.1") parsed from a GFM table's first column. */
+  identifier?: string;
+  /** Optional trailing metadata (e.g. "0.5 days") parsed from a GFM table's last column. */
+  meta?: string;
   order: number;
   isDone: boolean;
   completedAt?: number;

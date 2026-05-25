@@ -5,7 +5,18 @@ interface ParsedItem {
   kind: "heading" | "checklist";
   headingLevel?: number;
   indent?: number;
+  identifier?: string;
+  meta?: string;
 }
+
+/** Match a GFM table separator row, e.g. `|---|:---:|---:|`. */
+const isTableSeparator = (line: string): boolean =>
+  /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line);
+
+const splitTableRow = (line: string): string[] => {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return trimmed.split("|").map((c) => c.trim());
+};
 
 /**
  * Strip common inline markdown so the displayed text reads as prose:
@@ -33,15 +44,20 @@ const normalizeText = (s: string): string =>
   s.trim().toLowerCase().replace(/\s+/g, " ");
 
 const makeKey = (item: ParsedItem): string => {
-  const norm = normalizeText(item.text);
-  return item.kind === "heading"
-    ? `h${item.headingLevel}:${norm}`
-    : `c${item.indent ?? 0}:${norm}`;
+  if (item.kind === "heading") {
+    return `h${item.headingLevel}:${normalizeText(item.text)}`;
+  }
+  // Prefer the identifier when present — it's stable across edits to the task text.
+  if (item.identifier) {
+    return `t:${normalizeText(item.identifier)}`;
+  }
+  return `c${item.indent ?? 0}:${normalizeText(item.text)}`;
 };
 
 /**
  * Pull tracked items out of PRD markdown:
- *   - Headings (# .. ######) → kind: 'heading'
+ *   - Headings (## .. ######) → kind: 'heading' (H1 skipped — doc title)
+ *   - GFM tables → each data row becomes a checklist item with identifier + meta
  *   - Bullet items (-, *, +) including GFM task lists ([ ] / [x]) → kind: 'checklist'
  *   - Numbered list items (1., 2., …) → kind: 'checklist'
  * Items appear in document order. Skips fenced code blocks.
@@ -54,8 +70,8 @@ export function parsePrdItems(markdown: string): ParsedItem[] {
   const lines = markdown.split("\n");
   let inFence = false;
 
-  for (const rawLine of lines) {
-    const line = rawLine;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
     // Toggle fenced code block (``` or ~~~).
     if (/^\s*(```|~~~)/.test(line)) {
@@ -63,6 +79,62 @@ export function parsePrdItems(markdown: string): ParsedItem[] {
       continue;
     }
     if (inFence) continue;
+
+    // GFM table: a row starting with `|` followed by a separator row.
+    if (
+      /^\s*\|/.test(line) &&
+      i + 1 < lines.length &&
+      isTableSeparator(lines[i + 1])
+    ) {
+      // Skip header + separator, then collect data rows until table ends.
+      i += 2;
+      while (i < lines.length && /^\s*\|/.test(lines[i])) {
+        const cells = splitTableRow(lines[i]);
+        if (cells.length === 0 || cells.every((c) => !c)) {
+          i++;
+          continue;
+        }
+
+        let identifier: string | undefined;
+        let text: string;
+        let meta: string | undefined;
+
+        if (cells.length === 1) {
+          text = cells[0];
+        } else if (cells.length === 2) {
+          // 2 cells: only treat first as identifier if it looks like one
+          // (short, alphanumeric with dots/dashes only).
+          if (cells[0].length <= 16 && /^[\w.\-/]+$/.test(cells[0])) {
+            identifier = cells[0];
+            text = cells[1];
+          } else {
+            text = cells.join(" — ");
+          }
+        } else {
+          // 3+ cells: first = identifier, last = meta, middle joined = text.
+          identifier = cells[0];
+          meta = cells[cells.length - 1];
+          text = cells.slice(1, -1).join(" — ");
+        }
+
+        text = stripInlineMarkdown(text);
+        identifier = identifier ? stripInlineMarkdown(identifier) : undefined;
+        meta = meta ? stripInlineMarkdown(meta) : undefined;
+
+        if (text) {
+          items.push({
+            kind: "checklist",
+            text,
+            identifier,
+            meta,
+            indent: 1, // sit slightly nested under the preceding heading
+          });
+        }
+        i++;
+      }
+      i--; // counter the outer i++
+      continue;
+    }
 
     // Heading: leading hashes (1-6), at least one space, then text.
     // Skip H1 — the document title is not actionable.
@@ -120,6 +192,8 @@ export function computeChecklist(feature: Feature): ChecklistItem[] {
       kind: item.kind,
       headingLevel: item.headingLevel,
       indent: item.indent,
+      identifier: item.identifier,
+      meta: item.meta,
       order,
       isDone: state?.isDone ?? false,
       completedAt: state?.completedAt,

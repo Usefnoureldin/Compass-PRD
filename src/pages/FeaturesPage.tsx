@@ -402,15 +402,37 @@ const InlineChecklistRow: React.FC<InlineChecklistRowProps> = ({ item, onToggle 
       >
         {item.isDone && <Check size={9} strokeWidth={3} />}
       </span>
-      <span
-        className={cn(
-          "flex-1 text-[11px] leading-snug line-clamp-2",
-          item.isDone && "line-through decoration-1"
+      <div className="flex-1 min-w-0 flex items-start gap-2">
+        {item.identifier && (
+          <span
+            className={cn(
+              "shrink-0 text-[10px] font-bold tabular-nums tracking-tight text-primary mt-[1px]",
+              item.isDone && "line-through decoration-1"
+            )}
+          >
+            {item.identifier}
+          </span>
         )}
-        title={item.text}
-      >
-        {item.text}
-      </span>
+        <span
+          className={cn(
+            "flex-1 text-[11px] leading-snug line-clamp-2 min-w-0",
+            item.isDone && "line-through decoration-1"
+          )}
+          title={item.identifier ? `${item.identifier} — ${item.text}` : item.text}
+        >
+          {item.text}
+        </span>
+        {item.meta && (
+          <span
+            className={cn(
+              "shrink-0 text-[9px] font-medium px-1.5 py-[1px] rounded bg-muted/70 text-muted-foreground tabular-nums whitespace-nowrap mt-[1px]",
+              item.isDone && "opacity-60"
+            )}
+          >
+            {item.meta}
+          </span>
+        )}
+      </div>
     </button>
   );
 };
