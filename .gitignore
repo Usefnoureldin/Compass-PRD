@@ -127,3 +127,5 @@ dist
 .vscode
 *.swp
 *.swo
+.gstack/
+.vercel

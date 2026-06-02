@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Lightbulb, Ticket, CheckCircle2, Rocket, Menu, X, Users, ClipboardList, Palette, Building2, Layers, Bug, Sparkles } from "lucide-react";
+import { LayoutDashboard, Lightbulb, Ticket, CheckCircle2, Rocket, Menu, X, Users, ClipboardList, Palette, Building2, Layers, Bug, Sparkles, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/Button";
 import { ThemeToggle } from "../ui/ThemeToggle";
@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip } from "../ui/Tooltip";
 import { NotificationPopover } from "../notifications/NotificationPopover";
 import { SaveIndicator } from "./SaveIndicator";
+import { useAuth } from "../../context/AuthContext";
 
 interface SidebarProps {
   children: React.ReactNode;
@@ -20,6 +21,13 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const mainRef = React.useRef<HTMLElement>(null);
+  const { user, signOut } = useAuth();
+  const userLabel =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    (user?.user_metadata?.name as string | undefined) ??
+    user?.email?.split("@")[0] ??
+    "Workspace";
+  const userEmail = user?.email ?? "";
 
   // Scroll to top on every route change
   React.useEffect(() => {
@@ -88,12 +96,17 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500 to-teal-700 shrink-0"></div>
                 <div className="flex flex-col leading-tight">
-                  <span className="text-[13px] font-medium">Workspace</span>
-                  <span className="text-[9px] text-muted-foreground">Founder</span>
+                  <span className="text-[13px] font-medium">{userLabel}</span>
+                  <span className="text-[9px] text-muted-foreground">{userEmail || "Signed in"}</span>
                 </div>
               </div>
-              <div className="scale-90">
-                <ThemeToggle />
+              <div className="flex items-center gap-1">
+                <div className="scale-90">
+                  <ThemeToggle />
+                </div>
+                <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8 min-w-0 text-muted-foreground hover:text-foreground">
+                  <LogOut size={16} />
+                </Button>
               </div>
             </div>
           </motion.div>
@@ -219,8 +232,8 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
                 {!isCollapsed && (
                   <motion.div initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }} className="flex items-center justify-between flex-1 ml-1 overflow-hidden">
                     <div className="flex flex-col whitespace-nowrap overflow-hidden gap-0.5 mt-0.5">
-                      <span className="text-[13px] font-semibold truncate leading-none">Workspace</span>
-                      <span className="text-[9px] text-muted-foreground truncate leading-none opacity-80">Founder</span>
+                      <span className="text-[13px] font-semibold truncate leading-none">{userLabel}</span>
+                      <span className="text-[9px] text-muted-foreground truncate leading-none opacity-80">{userEmail || "Signed in"}</span>
                     </div>
                     <div className="flex items-center gap-0.5 -mr-1">
                       <div className="[&_button]:h-8 [&_button]:w-8 [&_button]:min-w-0 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors">
@@ -229,6 +242,11 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
                       <div className="[&_button]:h-8 [&_button]:w-8 [&_button]:min-w-0 text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors">
                         <ThemeToggle />
                       </div>
+                      <Tooltip content="Sign out" side="top">
+                        <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8 min-w-0 text-muted-foreground hover:text-foreground">
+                          <LogOut size={16} />
+                        </Button>
+                      </Tooltip>
                     </div>
                   </motion.div>
                 )}
@@ -244,6 +262,11 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
                   <div className="[&_button]:h-8 [&_button]:w-8 [&_button]:min-w-0">
                     <ThemeToggle />
                   </div>
+                  <Tooltip content="Sign out" side="right">
+                    <Button variant="ghost" size="icon" onClick={signOut} className="h-8 w-8 min-w-0 text-muted-foreground hover:text-foreground">
+                      <LogOut size={16} />
+                    </Button>
+                  </Tooltip>
                 </motion.div>
               )}
             </AnimatePresence>
