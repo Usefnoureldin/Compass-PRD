@@ -91,8 +91,10 @@ export const FeaturesListPage: React.FC = () => {
   }, [rows]);
 
   const goToBoard = () => navigate("/features/board");
-  const openOnBoard = (featureId: string) =>
-    navigate(`/features/board?open=${encodeURIComponent(featureId)}`);
+  const openOnBoard = (featureId: string) => {
+    const encoded = encodeURIComponent(featureId);
+    navigate(`/features/board?focus=${encoded}&open=${encoded}`);
+  };
 
   return (
     <div className="pt-6">

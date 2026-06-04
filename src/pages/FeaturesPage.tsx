@@ -63,8 +63,11 @@ export const FeaturesPage: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Open a feature's detail modal when the URL carries ?open=<id> (e.g. from the
-  // table view). Only triggers when the feature actually exists in loaded data.
+  // Two URL params drive this page:
+  //   ?focus=<headline-id> — scopes the kanban to that headline's sub-features.
+  //                         Persists across modal open/close.
+  //   ?open=<id>          — auto-opens that feature's detail modal once.
+  //                         Stripped on close so refresh doesn't re-open.
   useEffect(() => {
     const openId = searchParams.get("open");
     if (!openId) return;
@@ -82,15 +85,19 @@ export const FeaturesPage: React.FC = () => {
     }
   };
 
-  // When ?open=<id> points at a headline (no parent of its own), scope the
-  // kanban to that headline's children. Sub-features (parentExternalId set)
-  // act as a normal kanban; opening one keeps the parent's scope intact.
+  const clearScope = () => {
+    setSelectedId(null);
+    setSearchParams(new URLSearchParams(), { replace: true });
+  };
+
+  // ?focus=<headline-id> scopes the kanban to that headline's children.
+  // Independent of ?open so closing the modal preserves the scope.
   const scopeFeature = useMemo(() => {
-    const openId = searchParams.get("open");
-    if (!openId) return null;
-    const f = data.features.find((x) => x.id === openId);
-    if (!f) return null;
-    return f.parentExternalId ? null : f;
+    const focusId = searchParams.get("focus");
+    if (!focusId) return null;
+    const f = data.features.find((x) => x.id === focusId);
+    if (!f || f.parentExternalId) return null;
+    return f;
   }, [searchParams, data.features]);
 
   const baseFeatures = useMemo(() => {
@@ -146,13 +153,24 @@ export const FeaturesPage: React.FC = () => {
   return (
     <>
       <div className="pt-6">
-        <Link
-          to="/features"
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
-        >
-          <ArrowLeft size={12} />
-          Back to features list
-        </Link>
+        <div className="flex items-center gap-3 mb-3">
+          <Link
+            to="/features"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft size={12} />
+            Back to features list
+          </Link>
+          {scopeFeature && (
+            <button
+              type="button"
+              onClick={clearScope}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              · Show all features
+            </button>
+          )}
+        </div>
         <PageToolbar
           title={scopeFeature ? `Sub-features of ${scopeFeature.title}` : "Features"}
           searchQuery={searchQuery}
