@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { Link, useSearchParams } from "react-router-dom";
 import { useData } from "@/context/DataContext";
 import { Feature, FeatureStatus } from "@/types";
 import { computeChecklist } from "@/lib/checklist";
@@ -21,6 +22,7 @@ import {
   Rocket,
   FileText,
   Paperclip,
+  ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +61,26 @@ export const FeaturesPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Open a feature's detail modal when the URL carries ?open=<id> (e.g. from the
+  // table view). Only triggers when the feature actually exists in loaded data.
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (!openId) return;
+    if (data.features.some((f) => f.id === openId)) {
+      setSelectedId(openId);
+    }
+  }, [searchParams, data.features]);
+
+  const handleCloseDetail = () => {
+    setSelectedId(null);
+    if (searchParams.has("open")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("open");
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -106,6 +128,13 @@ export const FeaturesPage: React.FC = () => {
   return (
     <>
       <div className="pt-6">
+        <Link
+          to="/features"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-3"
+        >
+          <ArrowLeft size={12} />
+          Back to features list
+        </Link>
         <PageToolbar
           title="Features"
           searchQuery={searchQuery}
@@ -197,7 +226,7 @@ export const FeaturesPage: React.FC = () => {
       </div>
 
       <NewFeatureModal isOpen={createOpen} onClose={() => setCreateOpen(false)} onCreated={(id) => setSelectedId(id)} />
-      <FeatureDetailModal feature={selected} isOpen={!!selected} onClose={() => setSelectedId(null)} />
+      <FeatureDetailModal feature={selected} isOpen={!!selected} onClose={handleCloseDetail} />
     </>
   );
 };
