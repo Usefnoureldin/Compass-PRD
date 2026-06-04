@@ -82,16 +82,34 @@ export const FeaturesPage: React.FC = () => {
     }
   };
 
+  // When ?open=<id> points at a headline (no parent of its own), scope the
+  // kanban to that headline's children. Sub-features (parentExternalId set)
+  // act as a normal kanban; opening one keeps the parent's scope intact.
+  const scopeFeature = useMemo(() => {
+    const openId = searchParams.get("open");
+    if (!openId) return null;
+    const f = data.features.find((x) => x.id === openId);
+    if (!f) return null;
+    return f.parentExternalId ? null : f;
+  }, [searchParams, data.features]);
+
+  const baseFeatures = useMemo(() => {
+    if (!scopeFeature?.externalId) return data.features;
+    return data.features.filter(
+      (f) => f.parentExternalId === scopeFeature.externalId
+    );
+  }, [data.features, scopeFeature]);
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return data.features;
-    return data.features.filter(
+    if (!q) return baseFeatures;
+    return baseFeatures.filter(
       (f) =>
         f.title.toLowerCase().includes(q) ||
         f.description.toLowerCase().includes(q) ||
         f.prdMarkdown.toLowerCase().includes(q)
     );
-  }, [data.features, searchQuery]);
+  }, [baseFeatures, searchQuery]);
 
   const grouped = useMemo(() => {
     const out: Record<FeatureStatus, Feature[]> = {
@@ -136,12 +154,12 @@ export const FeaturesPage: React.FC = () => {
           Back to features list
         </Link>
         <PageToolbar
-          title="Features"
+          title={scopeFeature ? `Sub-features of ${scopeFeature.title}` : "Features"}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           searchPlaceholder="Search features and PRDs..."
-          count={data.features.length}
-          countLabel="features"
+          count={scopeFeature ? baseFeatures.length : data.features.length}
+          countLabel={scopeFeature ? "sub-features" : "features"}
           actions={
             <Button size="sm" onClick={() => setCreateOpen(true)}>
               <Plus size={16} className="mr-1" />
@@ -150,7 +168,22 @@ export const FeaturesPage: React.FC = () => {
           }
         />
 
-        {data.features.length === 0 ? (
+        {scopeFeature && baseFeatures.length === 0 ? (
+          <EmptyState
+            icon={Sparkles}
+            title={`No sub-features yet for "${scopeFeature.title}"`}
+            description="This headline has no sub-features tracked as separate Compass rows yet. Either add them as new features (set parent_external_id in frontmatter), or close this view to see the full board."
+            action={
+              <Link
+                to="/features"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft size={12} />
+                Back to features list
+              </Link>
+            }
+          />
+        ) : data.features.length === 0 ? (
           <EmptyState
             icon={Sparkles}
             title="No features yet"

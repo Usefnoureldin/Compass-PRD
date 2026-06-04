@@ -200,6 +200,8 @@ export interface Feature {
   order: number;
   createdAt: number;
   updatedAt: number;
+  /** Stable external identifier — the upsert key used by the hostbase-product sync CLI. */
+  externalId?: string;
   /** When set, this feature is a sub-feature of another headline; hidden from /features table. */
   parentExternalId?: string;
 }
