@@ -42,6 +42,7 @@ export const FeaturesListPage: React.FC = () => {
 
   const rows: FeatureRow[] = useMemo(() => {
     return data.features
+      .filter((feature) => !feature.parentExternalId)
       .map((feature) => {
         const { done, total } = checklistProgress(feature);
         const pct = total === 0 ? 0 : Math.round((done / total) * 100);
@@ -100,7 +101,7 @@ export const FeaturesListPage: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         searchPlaceholder="Search features and PRDs..."
-        count={data.features.length}
+        count={rows.length}
         countLabel="features"
         actions={
           <Button size="sm" onClick={goToBoard}>

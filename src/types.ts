@@ -200,6 +200,8 @@ export interface Feature {
   order: number;
   createdAt: number;
   updatedAt: number;
+  /** When set, this feature is a sub-feature of another headline; hidden from /features table. */
+  parentExternalId?: string;
 }
 
 export interface CompassData {

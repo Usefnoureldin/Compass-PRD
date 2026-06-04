@@ -174,6 +174,7 @@ const rowToFeature = (r: any): Feature => ({
   order: r.order_index,
   createdAt: msFrom(r.created_at),
   updatedAt: msFrom(r.updated_at),
+  parentExternalId: r.parent_external_id ?? undefined,
 });
 
 const rowToFeatureAttachment = (r: any): FeatureAttachment => ({
@@ -329,6 +330,7 @@ const featureToRow = (f: Feature) =>
     order_index: f.order,
     created_at: ts(f.createdAt),
     updated_at: ts(f.updatedAt),
+    parent_external_id: f.parentExternalId,
   });
 
 const featureAttachmentToRow = (a: FeatureAttachment) =>
