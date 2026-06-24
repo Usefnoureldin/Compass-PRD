@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useData } from "@/context/DataContext";
-import { Feature, FeatureStatus } from "@/types";
+import { Feature } from "@/types";
 import { checklistProgress } from "@/lib/checklist";
 import { PageToolbar } from "@/components/layout/PageToolbar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -26,12 +26,14 @@ const STATUS_FILTERS: { value: "all" | DerivedStatus; label: string }[] = [
   { value: "completed", label: "Completed" },
 ];
 
-function deriveStatus(feature: Feature, done: number, total: number): DerivedStatus {
-  if (feature.status === "shipped") return "completed";
-  if (feature.status === "building") {
-    return total > 0 && done > 0 ? "in_progress" : "pending";
-  }
-  return "pending";
+function deriveStatus(feature: Feature): DerivedStatus {
+  // feature.status carries the raw 6-state DB value at runtime.
+  const s = feature.status as string;
+  if (s === "shipped") return "completed";
+  // Building/blocked = actively in flight, regardless of whether the per-item
+  // checklist has been ticked (top-level docs rarely tick their own bullets).
+  if (s === "building" || s === "blocked") return "in_progress";
+  return "pending"; // planned, drafting, deferred
 }
 
 export const FeaturesListPage: React.FC = () => {
@@ -46,12 +48,12 @@ export const FeaturesListPage: React.FC = () => {
       .map((feature) => {
         const { done, total } = checklistProgress(feature);
         const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-        const derived = deriveStatus(feature, done, total);
+        const derived = deriveStatus(feature);
         return { feature, derived, pct, done, total };
       })
       .sort((a, b) => {
-        const order: Record<FeatureStatus, number> = { building: 0, planned: 1, shipped: 2 };
-        const so = order[a.feature.status] - order[b.feature.status];
+        const order: Record<string, number> = { building: 0, blocked: 0, planned: 1, drafting: 1, deferred: 2, shipped: 3 };
+        const so = (order[a.feature.status] ?? 1) - (order[b.feature.status] ?? 1);
         if (so !== 0) return so;
         return a.feature.order - b.feature.order;
       });

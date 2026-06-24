@@ -124,8 +124,13 @@ export const FeaturesPage: React.FC = () => {
       building: [],
       shipped: [],
     };
+    // feature.status carries the raw 6-state DB value at runtime. Map the
+    // statuses without their own column into one so nothing silently vanishes:
+    //   shipped → Shipped, building/blocked → Building, else → Planned.
+    const toColumn = (s: string): FeatureStatus =>
+      s === "shipped" ? "shipped" : s === "building" || s === "blocked" ? "building" : "planned";
     for (const f of filtered) {
-      if (out[f.status]) out[f.status].push(f);
+      out[toColumn(f.status)].push(f);
     }
     for (const k of STATUS_ORDER) out[k].sort((a, b) => a.order - b.order);
     return out;
