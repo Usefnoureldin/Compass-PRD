@@ -1,10 +1,10 @@
 # Project State
 
-_Last updated: 2026-06-02_
+_Last updated: 2026-06-24_
 
 ## Overview
 
-Compass is an internal product-ops tool used to track Hostbase product requirements, client requests, ideas, bugs, sprints, dev activity, and **features with PRD documents**. It started as a frontend-only Vite + React app with localStorage persistence. As of 2026-05-22 it is wired to a shared Supabase database so data survives across browsers and sessions. As of 2026-05-25 it has a Features module with markdown PRDs and `.md`/`.pdf` attachments stored in Supabase Storage. As of 2026-06-02 it is deployed on Vercel behind Google OAuth + an email allowlist, with RLS locked down, and feature cards can flow in via a CLI sync from sibling repos (`hostbase-product/features/*.md` → `compass.features`).
+Compass is an internal product-ops tool used to track Hostbase product requirements, client requests, ideas, bugs, sprints, dev activity, and **features with PRD documents**. It started as a frontend-only Vite + React app with localStorage persistence. As of 2026-05-22 it is wired to a shared Supabase database so data survives across browsers and sessions. As of 2026-05-25 it has a Features module with markdown PRDs and `.md`/`.pdf` attachments stored in Supabase Storage. As of 2026-06-02 it is deployed on Vercel behind Google OAuth + an email allowlist, with RLS locked down, and feature cards can flow in via a CLI sync from sibling repos (`hostbase-product/features/*.md` → `compass.features`). **As of 2026-06-24 the productization plan is surfaced two ways — a read-oriented `/plan` document view and a PDF-style table on the Features board — the raw-markdown PRD modal was removed, and the Dashboard was rebuilt around a build-status overview. See [2026-06-24 changes](#2026-06-24--plan-view-features-table-dashboard-overview-v40-sync).**
 
 - **Repo**: `Usefnoureldin/Compass-PRD` (origin, private) — branch `main`. Upstream: `AlyLoutfy/Compass`.
 - **Production URL**: https://compass-eight-taupe.vercel.app — Vercel project `compass` under team `youssefs-projects-94b1f3d5`. Git-connected to `Usefnoureldin/Compass-PRD`; pushes to `main` trigger an auto-deploy.
@@ -47,16 +47,20 @@ src/
 │   ├── auth/
 │   │   └── ProtectedRoute.tsx   # Wraps all in-app routes; redirects to /login when no session
 │   ├── layout/
-│   │   ├── AppLayout.tsx        # Sidebar (Features sits right after Dashboard); shows
+│   │   ├── AppLayout.tsx        # Sidebar (Plan + Features sit right after Dashboard); shows
 │   │   │                          signed-in user + Sign-out button in the footer
 │   │   ├── PageToolbar.tsx
 │   │   └── SaveIndicator.tsx    # Bottom-right "Saving…/Saved/Error" pill
-│   └── features/
-│       ├── FeatureDetailModal.tsx # PRD editor + attachments side panel
-│       └── MarkdownPreview.tsx   # react-markdown + remark-gfm + prose styling
+│   ├── dashboard/
+│   │   └── DashboardOverview.tsx # "Currently building" (% per top-level feature) + "Up next" pending list
+│   └── features/                # (emptied 2026-06-24 — FeatureDetailModal / MarkdownPreview /
+│                                #  ChecklistModal deleted; tasks now render inline in the table)
 ├── data/dummyData.ts            # Not imported anywhere (legacy)
 └── pages/
-    ├── FeaturesPage.tsx         # Kanban by status + new-feature modal
+    ├── PlanView.tsx             # /plan — ordered PDF-style phase doc (timeline header + per-phase status/%/remaining)
+    ├── FeaturesListPage.tsx     # /features — table of top-level features (Pending/In progress/Completed)
+    ├── FeaturesPage.tsx         # /features/board — PDF-style phase TABLE (# · Sub-phase · What it does · Status · Progress) with expandable inline task checklists
+    ├── TeamBoard.tsx            # / (Dashboard) — renders DashboardOverview (standup section removed 2026-06-24)
     └── LoginPage.tsx            # "Sign in with Google" card on a glass panel
 public/
 └── brand/logos/                 # Hostbase brand SVGs (app-icon, full-logo, logomark, wordmark)
@@ -171,14 +175,24 @@ Per-table snake_case ↔ camelCase mappers live in the same file. Date fields cr
 
 `<SaveIndicator />` (mounted in `AppLayout`) renders a transient "Saving…" → "Saved" pill bottom-right, or a persistent destructive toast on error with a Retry button. **No silent failures.**
 
-## Features module (added 2026-05-25, extended 2026-06-02)
+## Features module (added 2026-05-25, extended 2026-06-02, redesigned 2026-06-24)
 
-- **`/features` page** — kanban grouped by status. Status enum widened on 2026-06-02 from 4 to 6: `drafting / planned / building / shipped / blocked / deferred`.
-- **New feature modal** — title, short description, status, owner, org.
-- **Feature detail modal** — inline metadata editing (title, status, owner) + PRD editor with Edit/Preview toggle (markdown rendered via `react-markdown` + `remark-gfm`, prose-styled) + attachments side panel.
-- **`.md` upload behavior** — any `.md` uploaded (drop, picker, or "Load into editor" on an existing attachment) automatically populates the PRD editor and auto-switches to Preview. PDFs only attach.
-- **PDF preview** — viewed inline via an iframe inside the modal, or opened in a new tab.
-- **Intended workflow**: write the plan with Claude → drop the `.md` into the feature → PRD body autoloads → save.
+- **`/features` (list)** — table of top-level features with derived status tabs (Pending / In progress / Completed). `building`/`blocked` read as "In progress" by status (no longer gated on manual checklist ticks).
+- **`/features/board` (table)** — as of 2026-06-24 this is a **PDF-style phase table**, not a kanban: columns `# · Sub-phase · What it does · Status · Progress`, phases ordered by `order_index`, full 6-state status badges. Each row expands inline to its task checklist, grouped under the PRD's own markdown headings, with checkboxes that persist via `toggleChecklistItem`. The `#` tag is parsed from the title (`Phase 1.1 + 1.2 — …` → `1.1+1.2`). Progress counts ✅/shipped text markers + manual ticks; shipped phases read 100%.
+- **New feature modal** — title, short description, status, owner, org. (Creating a feature still works; PRD body now comes from the markdown sync rather than an in-app editor.)
+- **Removed 2026-06-24** — the raw-markdown **FeatureDetailModal** (PRD editor + attachments panel), `MarkdownPreview`, and the unused `ChecklistModal`. Reading/editing the raw PRD + uploading attachments is no longer in the UI; the per-phase task checklist (expandable in the table / Plan view) replaces it. `react-markdown` / `remark-gfm` remain as deps but are no longer imported.
+- Status enum (6 values, widened 2026-06-02): `drafting / planned / building / shipped / blocked / deferred`. `rowToFeature` keeps the raw value, so the UI handles all six (the old kanban silently dropped non-3-state features — fixed 2026-06-24).
+
+## 2026-06-24 — Plan view, Features table, Dashboard overview, v4.0 sync
+
+A UI pass to make Compass read like the productization-plan PDF, plus a v4.0 data sync. Shipped to prod (Compass-PRD `main` auto-deploys; phase data synced to `compass.features`).
+
+- **`/plan` (new — `PlanView.tsx`)** — a read-oriented, ordered document view of a scoped top-level feature: timeline-summary header (phases shipped, %, status breakdown, "Remaining to ship"), then each phase in order with status badge + % + "what's remaining" (Building/blocked phases auto-expanded). A pill row switches between top-level plans; "Board view" links to the table. Added a **Plan** nav item (between Dashboard and Features).
+- **Features board redesign** — kanban → PDF-style table (see Features module above).
+- **Dashboard rebuild (`TeamBoard.tsx` + `DashboardOverview.tsx`)** — the Dashboard now leads with **Currently building** (each top-level `building` feature with a % bar = phases shipped / total) and **Up next** (a pending-roadmap list: AI Assistant (Mia/Greg), WhatsApp automation, Dynamic Pricing Phase 2, tenant self-service, AI Brief, Integrations Page — an editable constant in `DashboardOverview.tsx`, not yet feature rows). The per-developer **standup timeline + Board/Standup toggle + Activity feed + date picker were removed** (standup component files remain in the tree, just unmounted).
+- **Bug fixes** — `FeaturesPage` kanban dropped features whose raw status wasn't planned/building/shipped (deferred/blocked vanished) → now bucketed. `FeaturesListPage` mislabeled `building` as "Pending" → now "In progress" by status.
+- **v4.0 data sync** — `hostbase-prod-plan.md` bumped to v4.0; authored phase files for the sub-phases that previously only lived in the master prose: **2.5** branding, **2.6 / 2.6b** Channex org-scoping, **2.7** NOT NULL, **2.8** isolation harness (all shipped), **2.9** custom domains (deferred), and **Phase 3 / 4 / 5** (planned, with task checklists). Phase 2 flipped `building → shipped` (critical path 2.1–2.8 complete). `compass.features` now has **28** rows under `hostbase-prod-plan` → the plan reads **23/28 shipped (82%)**.
+- **Local auth shortcut (dev only)** — a password was set on `youssef@suitespotegypt.com` via the admin API so the headless/CDP browser could sign in for screenshots; prod login is unchanged (Google OAuth). `compass.features` was added to the `supabase_realtime` publication (additive).
 
 ## Authentication (added 2026-06-02)
 
@@ -260,12 +274,16 @@ Sidebar logo and favicon load from `public/brand/logos/logomark/hostbase-logomar
 ## Recent commits (most recent first)
 
 ```
+a7aa366 feat(dashboard): drop standup/timeline section, keep build overview
+e6acacf feat(dashboard): currently-building progress + up-next pending list
+8ecc0a9 fix(features): parse multi-number phase tags (1.1 + 1.2 -> 1.1+1.2)
+4472e28 chore(features): delete dead PRD modal + helpers
+7da1d26 feat(features): PDF-style phase table; remove raw-markdown detail modal
+61a0480 fix(features): stop dropping non-3-state features; correct status labels
+35d00a1 feat(plan): add ordered PDF-style Plan view
 90160f9 feat(auth): Google OAuth + email allowlist + tightened RLS + Vercel deploy
-cce46d0 style(features): show progress percentage in chip
-e9167f7 feat(features): ticking a heading selects all descendants
-6864ff7 feat(features): parse GFM tables as checklist items
 f9e6bce migrate persistence from localStorage to Supabase
 5ef032d rebrand to Hostbase colors and logomark
-8c79dfb feat: Integrate Linear API for tickets and sprints management
-5eac01d feat: Implement in-table editing for Ideas/Reqs and enhance Bug Tracker UI
 ```
+
+> Companion change in `hostbase-product`: `docs(features): phase files for v4.0 — Phase 2 shipped + 2.5-2.9, Phase 3/4/5` (synced to `compass.features`).
