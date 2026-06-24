@@ -95,7 +95,7 @@ export const FeaturesListPage: React.FC = () => {
   const goToBoard = () => navigate("/features/board");
   const openOnBoard = (featureId: string) => {
     const encoded = encodeURIComponent(featureId);
-    navigate(`/features/board?focus=${encoded}&open=${encoded}`);
+    navigate(`/features/board?focus=${encoded}`);
   };
 
   return (
