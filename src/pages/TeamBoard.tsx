@@ -11,6 +11,7 @@ import { HeroDatePicker } from '../components/ui/HeroDatePicker';
 import { DateRange } from "react-day-picker";
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageToolbar } from '../components/layout/PageToolbar';
+import { DashboardOverview } from '../components/dashboard/DashboardOverview';
 
 
 import { cn } from '@/lib/utils';
@@ -136,6 +137,10 @@ export const TeamBoard: React.FC = () => {
                         </div>
                     }
                 />
+            </div>
+
+            <div className="mt-4">
+                <DashboardOverview />
             </div>
 
             <div className={cn("flex items-start mt-4", isSidebarOpen && !isStandupMode ? "gap-8" : "")}>
