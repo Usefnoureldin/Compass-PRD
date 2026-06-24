@@ -13,7 +13,6 @@ import {
 import { useData } from "@/context/DataContext";
 import { computeChecklist } from "@/lib/checklist";
 import { Feature } from "@/types";
-import { FeatureDetailModal } from "@/components/features/FeatureDetailModal";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
 
@@ -60,11 +59,10 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 
 interface PhaseRowProps {
   feature: Feature;
-  onOpen: (id: string) => void;
   defaultOpen: boolean;
 }
 
-const PhaseRow: React.FC<PhaseRowProps> = ({ feature, onOpen, defaultOpen }) => {
+const PhaseRow: React.FC<PhaseRowProps> = ({ feature, defaultOpen }) => {
   const [expanded, setExpanded] = useState(defaultOpen);
   const items = useMemo(() => computeChecklist(feature), [feature]);
   const tasks = items.filter((i) => i.kind === "checklist");
@@ -112,12 +110,6 @@ const PhaseRow: React.FC<PhaseRowProps> = ({ feature, onOpen, defaultOpen }) => 
             </div>
           )}
         </div>
-        <span
-          onClick={(e) => { e.stopPropagation(); onOpen(feature.id); }}
-          className="shrink-0 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          Open PRD
-        </span>
       </button>
 
       <AnimatePresence initial={false}>
@@ -178,7 +170,6 @@ const PhaseRow: React.FC<PhaseRowProps> = ({ feature, onOpen, defaultOpen }) => 
 export const PlanView: React.FC = () => {
   const { data } = useData();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const topLevel = useMemo(
     () => data.features.filter((f) => !f.parentExternalId).sort((a, b) => a.order - b.order),
@@ -222,8 +213,6 @@ export const PlanView: React.FC = () => {
     next.set("focus", id);
     setSearchParams(next, { replace: true });
   };
-
-  const selected = selectedId ? data.features.find((f) => f.id === selectedId) ?? null : null;
 
   return (
     <div className="pt-6 pb-10">
@@ -304,14 +293,13 @@ export const PlanView: React.FC = () => {
           </h3>
           <div className="flex flex-wrap gap-2">
             {remainingPhases.map((p) => (
-              <button
+              <span
                 key={p.id}
-                onClick={() => setSelectedId(p.id)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-xs hover:border-primary/40 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-xs"
               >
                 <span className={cn("h-1.5 w-1.5 rounded-full", metaFor(p.status).dot)} />
                 {p.title}
-              </button>
+              </span>
             ))}
           </div>
         </div>
@@ -329,12 +317,10 @@ export const PlanView: React.FC = () => {
           />
         ) : (
           phases.map((p) => (
-            <PhaseRow key={p.id} feature={p} onOpen={setSelectedId} defaultOpen={(p.status as string) === "building" || (p.status as string) === "blocked"} />
+            <PhaseRow key={p.id} feature={p} defaultOpen={(p.status as string) === "building" || (p.status as string) === "blocked"} />
           ))
         )}
       </div>
-
-      <FeatureDetailModal feature={selected} isOpen={!!selected} onClose={() => setSelectedId(null)} />
     </div>
   );
 };

@@ -1,11 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import React, { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
 import { useData } from "@/context/DataContext";
 import { Feature, FeatureStatus } from "@/types";
 import { computeChecklist } from "@/lib/checklist";
-import { Check } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
@@ -13,85 +11,209 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { PageToolbar } from "@/components/layout/PageToolbar";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { FeatureDetailModal } from "@/components/features/FeatureDetailModal";
 import {
   Plus,
   Sparkles,
-  ClipboardCheck,
-  Hammer,
-  Rocket,
   FileText,
   Paperclip,
   ArrowLeft,
+  ChevronRight,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STATUS_META: Record<
-  FeatureStatus,
-  { label: string; icon: typeof ClipboardCheck; tint: string; emptyHint: string; colSpan: string }
-> = {
-  planned: {
-    label: "Planned",
-    icon: ClipboardCheck,
-    tint: "text-blue-500 bg-blue-500/10",
-    emptyHint:
-      "Create a feature here. Drop a .md to bootstrap the PRD, then drag to Building when work starts.",
-    colSpan: "lg:col-span-1",
-  },
-  building: {
-    label: "Building",
-    icon: Hammer,
-    tint: "text-primary bg-primary/10",
-    emptyHint: "Drag features here when development kicks off.",
-    colSpan: "lg:col-span-2",
-  },
-  shipped: {
-    label: "Shipped",
-    icon: Rocket,
-    tint: "text-emerald-500 bg-emerald-500/10",
-    emptyHint: "Drag features here once they're live in production.",
-    colSpan: "lg:col-span-1",
-  },
+// feature.status carries the raw 6-state DB value at runtime even though the
+// type narrows to 3. Render all six with PDF-aligned status colors.
+type RawStatus = "drafting" | "planned" | "building" | "shipped" | "blocked" | "deferred";
+const STATUS_META: Record<RawStatus, { label: string; dot: string; chip: string }> = {
+  shipped: { label: "Shipped", dot: "bg-emerald-500", chip: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-emerald-500/20" },
+  building: { label: "Building", dot: "bg-primary", chip: "bg-primary/10 text-primary ring-primary/25" },
+  planned: { label: "Planned", dot: "bg-zinc-400", chip: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-300 ring-zinc-500/20" },
+  drafting: { label: "Drafting", dot: "bg-violet-400", chip: "bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-violet-500/20" },
+  blocked: { label: "Blocked", dot: "bg-red-500", chip: "bg-red-500/10 text-red-700 dark:text-red-400 ring-red-500/20" },
+  deferred: { label: "Deferred", dot: "bg-amber-500", chip: "bg-amber-500/10 text-amber-700 dark:text-amber-500 ring-amber-500/20" },
+};
+const metaFor = (s: string) => STATUS_META[s as RawStatus] ?? STATUS_META.planned;
+
+// The plan markdown narrates completion with ✅ / "shipped" / "done" markers —
+// count those as done so progress reflects reality, not just manual ticks.
+const DONE_MARKER = /✅|🟢|☑|✔|\bshipped\b|\bdone\b|\bcomplete(d)?\b|\bmerged\b/i;
+
+// Pull a short phase tag out of the title ("Phase 2.4-B — …" → "2.4-B").
+const phaseTag = (title: string): string | null => {
+  const m = title.match(/\bphase\s+([0-9][\w.+-]*?)(?=\s*(?:[—\-:]|$))/i);
+  return m ? m[1].replace(/[.\-+]$/, "") : null;
 };
 
-const STATUS_ORDER: FeatureStatus[] = ["planned", "building", "shipped"];
+// Grid template shared by the header and every row so columns line up.
+const COLS = "grid-cols-[3.5rem_minmax(200px,1.3fr)_minmax(240px,1.6fr)_8.5rem_9rem]";
+
+const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
+  const m = metaFor(status);
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1", m.chip)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", m.dot)} />
+      {m.label}
+    </span>
+  );
+};
+
+interface PhaseRowProps {
+  feature: Feature;
+  index: number;
+  attachmentCount: number;
+}
+
+const PhaseRow: React.FC<PhaseRowProps> = ({ feature, index, attachmentCount }) => {
+  const { actions } = useData();
+  const [expanded, setExpanded] = useState(false);
+  const items = useMemo(() => computeChecklist(feature), [feature]);
+  const tasks = items.filter((i) => i.kind === "checklist");
+  const isShipped = (feature.status as string) === "shipped";
+  const isDoneItem = (t: { isDone: boolean; text: string }) => t.isDone || DONE_MARKER.test(t.text);
+  const total = tasks.length;
+  const done = isShipped ? total : tasks.filter(isDoneItem).length;
+  const pct = total === 0 ? (isShipped ? 100 : 0) : Math.round((done / total) * 100);
+  const tag = phaseTag(feature.title);
+  const m = metaFor(feature.status);
+  const hasTasks = items.length > 0;
+  const toggle = () => hasTasks && setExpanded((v) => !v);
+
+  return (
+    <div className="border-b border-border last:border-0">
+      <div className={cn("grid items-center", COLS, "min-w-[760px] group hover:bg-muted/40 transition-colors")}>
+        {/* # + expand */}
+        <button
+          onClick={toggle}
+          className={cn("flex items-center gap-1 py-3 pl-3 pr-1 text-left", hasTasks ? "cursor-pointer" : "cursor-default")}
+        >
+          {hasTasks ? (
+            <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+          ) : (
+            <span className="w-3.5" />
+          )}
+          <span className="text-xs font-semibold tabular-nums text-primary">{tag ?? index + 1}</span>
+        </button>
+
+        {/* Sub-phase (title) */}
+        <button onClick={toggle} className="py-3 pr-3 text-left">
+          <span className="text-sm font-semibold leading-snug text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+            {feature.title}
+          </span>
+          <span className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+            {feature.prdMarkdown.trim() && (<span className="inline-flex items-center gap-0.5"><FileText size={10} /> PRD</span>)}
+            {attachmentCount > 0 && (<span className="inline-flex items-center gap-0.5"><Paperclip size={10} /> {attachmentCount}</span>)}
+          </span>
+        </button>
+
+        {/* What it does */}
+        <div className="py-3 pr-3 text-xs leading-relaxed text-muted-foreground line-clamp-2" title={feature.description}>
+          {feature.description || <span className="italic opacity-60">—</span>}
+        </div>
+
+        {/* Status */}
+        <div className="py-3 pr-3"><StatusBadge status={feature.status} /></div>
+
+        {/* Progress */}
+        <div className="py-3 pr-3">
+          {total > 0 ? (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-medium tabular-nums text-foreground">{done}/{total}</span>
+                <span className="tabular-nums text-muted-foreground">{pct}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className={cn("h-full rounded-full transition-all duration-500", m.dot)} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          ) : (
+            <span className="text-[11px] italic text-muted-foreground/60">no tasks</span>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence initial={false}>
+        {expanded && hasTasks && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden bg-muted/20"
+          >
+            <div className="min-w-[760px] px-4 py-3 pl-12">
+              <ul className="space-y-0.5">
+                {items.map((item) => (
+                  <ChecklistTaskRow
+                    key={item.key}
+                    item={item}
+                    forceDone={isShipped || DONE_MARKER.test(item.text)}
+                    onToggle={() => actions.toggleChecklistItem(feature.id, item.key)}
+                  />
+                ))}
+              </ul>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+interface ChecklistTaskRowProps {
+  item: ReturnType<typeof computeChecklist>[number];
+  forceDone: boolean;
+  onToggle: () => void;
+}
+
+const ChecklistTaskRow: React.FC<ChecklistTaskRowProps> = ({ item, forceDone, onToggle }) => {
+  const checked = item.isDone || forceDone;
+  if (item.kind === "heading") {
+    const indent = Math.max(0, (item.headingLevel ?? 2) - 2) * 10;
+    return (
+      <li style={{ paddingLeft: indent }} className="pt-3 first:pt-0">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.text}</span>
+      </li>
+    );
+  }
+  const indent = 4 + (item.indent ?? 0) * 14;
+  return (
+    <li style={{ paddingLeft: indent }}>
+      <button onClick={onToggle} className="group/task flex w-full items-start gap-2 rounded py-1 pr-2 text-left hover:bg-muted/60">
+        <span
+          className={cn(
+            "mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors",
+            checked ? "border-emerald-500 bg-emerald-500 text-white" : "border-muted-foreground/40 group-hover/task:border-primary"
+          )}
+        >
+          {checked && <Check size={9} strokeWidth={3} />}
+        </span>
+        <span className="flex min-w-0 flex-1 items-start gap-1.5">
+          {item.identifier && (
+            <span className={cn("shrink-0 text-[11px] font-bold tabular-nums text-primary", checked && "opacity-60")}>{item.identifier}</span>
+          )}
+          <span className={cn("text-[13px] leading-snug", checked ? "text-muted-foreground line-through decoration-1" : "text-foreground")}>
+            {item.text}
+          </span>
+          {item.meta && (
+            <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-[1px] text-[10px] font-medium tabular-nums text-muted-foreground">{item.meta}</span>
+          )}
+        </span>
+      </button>
+    </li>
+  );
+};
 
 export const FeaturesPage: React.FC = () => {
-  const { data, actions } = useData();
+  const { data } = useData();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Two URL params drive this page:
-  //   ?focus=<headline-id> — scopes the kanban to that headline's sub-features.
-  //                         Persists across modal open/close.
-  //   ?open=<id>          — auto-opens that feature's detail modal once.
-  //                         Stripped on close so refresh doesn't re-open.
-  useEffect(() => {
-    const openId = searchParams.get("open");
-    if (!openId) return;
-    if (data.features.some((f) => f.id === openId)) {
-      setSelectedId(openId);
-    }
-  }, [searchParams, data.features]);
-
-  const handleCloseDetail = () => {
-    setSelectedId(null);
-    if (searchParams.has("open")) {
-      const next = new URLSearchParams(searchParams);
-      next.delete("open");
-      setSearchParams(next, { replace: true });
-    }
-  };
-
   const clearScope = () => {
-    setSelectedId(null);
     setSearchParams(new URLSearchParams(), { replace: true });
   };
 
-  // ?focus=<headline-id> scopes the kanban to that headline's children.
-  // Independent of ?open so closing the modal preserves the scope.
   const scopeFeature = useMemo(() => {
     const focusId = searchParams.get("focus");
     if (!focusId) return null;
@@ -102,424 +224,120 @@ export const FeaturesPage: React.FC = () => {
 
   const baseFeatures = useMemo(() => {
     if (!scopeFeature?.externalId) return data.features;
-    return data.features.filter(
-      (f) => f.parentExternalId === scopeFeature.externalId
-    );
+    return data.features.filter((f) => f.parentExternalId === scopeFeature.externalId);
   }, [data.features, scopeFeature]);
 
-  const filtered = useMemo(() => {
+  const rows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return baseFeatures;
-    return baseFeatures.filter(
-      (f) =>
+    return baseFeatures
+      .filter((f) =>
+        !q ||
         f.title.toLowerCase().includes(q) ||
         f.description.toLowerCase().includes(q) ||
         f.prdMarkdown.toLowerCase().includes(q)
-    );
+      )
+      .sort((a, b) => a.order - b.order);
   }, [baseFeatures, searchQuery]);
-
-  const grouped = useMemo(() => {
-    const out: Record<FeatureStatus, Feature[]> = {
-      planned: [],
-      building: [],
-      shipped: [],
-    };
-    // feature.status carries the raw 6-state DB value at runtime. Map the
-    // statuses without their own column into one so nothing silently vanishes:
-    //   shipped → Shipped, building/blocked → Building, else → Planned.
-    const toColumn = (s: string): FeatureStatus =>
-      s === "shipped" ? "shipped" : s === "building" || s === "blocked" ? "building" : "planned";
-    for (const f of filtered) {
-      out[toColumn(f.status)].push(f);
-    }
-    for (const k of STATUS_ORDER) out[k].sort((a, b) => a.order - b.order);
-    return out;
-  }, [filtered]);
-
-  const selected = selectedId ? data.features.find((f) => f.id === selectedId) ?? null : null;
 
   const attachmentsByFeature = useMemo(() => {
     const map = new Map<string, number>();
-    for (const a of data.featureAttachments) {
-      map.set(a.featureId, (map.get(a.featureId) ?? 0) + 1);
-    }
+    for (const a of data.featureAttachments) map.set(a.featureId, (map.get(a.featureId) ?? 0) + 1);
     return map;
   }, [data.featureAttachments]);
 
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-    actions.moveFeature(
-      result.draggableId,
-      result.destination.droppableId as FeatureStatus,
-      result.destination.index
-    );
-  };
+  // Summary chips (status breakdown) for the scoped plan.
+  const breakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const f of rows) counts[f.status] = (counts[f.status] ?? 0) + 1;
+    return counts;
+  }, [rows]);
 
   return (
     <>
       <div className="pt-6">
-        <div className="flex items-center gap-3 mb-3">
-          <Link
-            to="/features"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft size={12} />
-            Back to features list
+        <div className="mb-3 flex items-center gap-3">
+          <Link to="/features" className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
+            <ArrowLeft size={12} /> Back to features list
           </Link>
           {scopeFeature && (
-            <button
-              type="button"
-              onClick={clearScope}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <button onClick={clearScope} className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground">
               · Show all features
             </button>
           )}
         </div>
+
         <PageToolbar
-          title={scopeFeature ? `Sub-features of ${scopeFeature.title}` : "Features"}
+          title={scopeFeature ? scopeFeature.title : "Features"}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          searchPlaceholder="Search features and PRDs..."
-          count={scopeFeature ? baseFeatures.length : data.features.length}
-          countLabel={scopeFeature ? "sub-features" : "features"}
+          searchPlaceholder="Search phases and PRDs..."
+          count={rows.length}
+          countLabel={scopeFeature ? "phases" : "features"}
           actions={
             <Button size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus size={16} className="mr-1" />
-              New feature
+              <Plus size={16} className="mr-1" /> New feature
             </Button>
           }
         />
 
-        {scopeFeature && baseFeatures.length === 0 ? (
+        {/* status breakdown */}
+        {rows.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1">
+            {(["building", "blocked", "planned", "drafting", "deferred", "shipped"] as RawStatus[])
+              .filter((s) => breakdown[s])
+              .map((s) => (
+                <span key={s} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className={cn("h-2 w-2 rounded-full", STATUS_META[s].dot)} />
+                  <span className="font-medium tabular-nums text-foreground">{breakdown[s]}</span> {STATUS_META[s].label}
+                </span>
+              ))}
+          </div>
+        )}
+
+        {rows.length === 0 ? (
           <EmptyState
             icon={Sparkles}
-            title={`No sub-features yet for "${scopeFeature.title}"`}
-            description="This headline has no sub-features tracked as separate Compass rows yet. Either add them as new features (set parent_external_id in frontmatter), or close this view to see the full board."
-            action={
-              <Link
-                to="/features"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ArrowLeft size={12} />
-                Back to features list
-              </Link>
+            title={scopeFeature ? `No phases yet for "${scopeFeature.title}"` : "No features yet"}
+            description={
+              scopeFeature
+                ? "This plan has no sub-features tracked as separate Compass rows yet (set parent_external_id in frontmatter)."
+                : "Start by creating a feature. Attach a PRD as markdown or upload one as .md or .pdf."
             }
-          />
-        ) : data.features.length === 0 ? (
-          <EmptyState
-            icon={Sparkles}
-            title="No features yet"
-            description="Start by creating a feature. Attach a PRD as markdown or upload the one you generated with Claude as .md or .pdf."
             action={
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus size={16} className="mr-1" />
-                New feature
-              </Button>
+              scopeFeature ? (
+                <Link to="/features" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  <ArrowLeft size={12} /> Back to features list
+                </Link>
+              ) : (
+                <Button onClick={() => setCreateOpen(true)}><Plus size={16} className="mr-1" /> New feature</Button>
+              )
             }
           />
         ) : (
-          <DragDropContext onDragEnd={onDragEnd}>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-              {STATUS_ORDER.map((status) => {
-                const meta = STATUS_META[status];
-                const Icon = meta.icon;
-                const items = grouped[status];
-                return (
-                  <Droppable droppableId={status} key={status}>
-                    {(dropProvided, dropSnapshot) => (
-                      <div
-                        ref={dropProvided.innerRef}
-                        {...dropProvided.droppableProps}
-                        className={cn(
-                          "bg-muted/30 rounded-2xl p-3 min-h-[240px] flex flex-col transition-colors",
-                          meta.colSpan,
-                          dropSnapshot.isDraggingOver && "bg-primary/5 ring-2 ring-primary/30"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-3 px-1">
-                          <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", meta.tint)}>
-                            <Icon size={14} />
-                          </div>
-                          <span className="font-semibold text-sm">{meta.label}</span>
-                          <span className="text-xs text-muted-foreground ml-auto">{items.length}</span>
-                        </div>
-                        <div className="flex-1 space-y-2">
-                          {items.length === 0 && !dropSnapshot.isDraggingOver && (
-                            <div className="text-xs text-muted-foreground/70 italic text-center py-6 px-2 leading-relaxed">
-                              {meta.emptyHint}
-                            </div>
-                          )}
-                          {items.map((feature, index) => (
-                            <Draggable draggableId={feature.id} index={index} key={feature.id}>
-                              {(dragProvided, dragSnapshot) => (
-                                <div
-                                  ref={dragProvided.innerRef}
-                                  {...dragProvided.draggableProps}
-                                  {...dragProvided.dragHandleProps}
-                                  style={dragProvided.draggableProps.style}
-                                  className={cn(dragSnapshot.isDragging && "opacity-90 shadow-lg")}
-                                >
-                                  <FeatureCard
-                                    feature={feature}
-                                    attachmentCount={attachmentsByFeature.get(feature.id) ?? 0}
-                                    onClick={() => setSelectedId(feature.id)}
-                                  />
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {dropProvided.placeholder}
-                        </div>
-                      </div>
-                    )}
-                  </Droppable>
-                );
-              })}
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
+            {/* Header */}
+            <div className={cn("grid min-w-[760px] items-center border-b border-border bg-primary/10", COLS)}>
+              {["#", "Sub-phase", "What it does", "Status", "Progress"].map((h, i) => (
+                <div key={h} className={cn("px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-primary", i === 0 && "pl-3")}>
+                  {h}
+                </div>
+              ))}
             </div>
-          </DragDropContext>
-        )}
-      </div>
-
-      <NewFeatureModal isOpen={createOpen} onClose={() => setCreateOpen(false)} onCreated={(id) => setSelectedId(id)} />
-      <FeatureDetailModal feature={selected} isOpen={!!selected} onClose={handleCloseDetail} />
-    </>
-  );
-};
-
-interface FeatureCardProps {
-  feature: Feature;
-  attachmentCount: number;
-  onClick: () => void;
-}
-
-const FeatureCard: React.FC<FeatureCardProps> = ({ feature, attachmentCount, onClick }) => {
-  const { data, actions } = useData();
-  const owner = data.users.find((u) => u.id === feature.ownerId);
-  const org = data.organizations.find((o) => o.id === feature.orgId);
-  const hasPrd = feature.prdMarkdown.trim().length > 0;
-
-  const items = useMemo(() => computeChecklist(feature), [feature]);
-  const total = items.length;
-  const done = items.filter((i) => i.isDone).length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-
-  const isBuilding = feature.status === "building";
-
-  // Building cards show inline checklist + progress bar.
-  // All other status cards stay compact — no checklist UI.
-  if (isBuilding && total > 0) {
-    return (
-      <motion.div
-        layout
-        onClick={onClick}
-        whileHover={{ y: -1 }}
-        className="cursor-pointer w-full text-left bg-card border border-border/40 rounded-xl p-3 hover:border-primary/40 hover:shadow-sm transition-all"
-      >
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="font-semibold text-sm line-clamp-2 flex-1">{feature.title}</div>
-          <div
-            className={cn(
-              "shrink-0 text-xs font-semibold tabular-nums px-2 py-0.5 rounded-md flex items-baseline gap-1.5",
-              done === total
-                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                : "bg-primary/10 text-primary"
-            )}
-          >
-            <span>{done}/{total}</span>
-            <span className="text-[10px] font-medium opacity-80">{pct}%</span>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-3">
-          <div
-            className="h-full bg-primary transition-all duration-500 ease-out"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-
-        {/* Inline checklist — fade-out at the bottom hints at scrollable overflow */}
-        <div
-          className="relative -mx-1 rounded-md"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="max-h-[28rem] overflow-y-auto px-1 py-1 space-y-0.5 [scrollbar-width:thin]">
-            {items.map((item) => (
-              <InlineChecklistRow
-                key={item.key}
-                item={item}
-                onToggle={() => actions.toggleChecklistItem(feature.id, item.key)}
+            {/* Rows */}
+            {rows.map((f, i) => (
+              <PhaseRow
+                key={f.id}
+                feature={f}
+                index={i}
+                attachmentCount={attachmentsByFeature.get(f.id) ?? 0}
               />
             ))}
           </div>
-          {items.length > 10 && (
-            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-card to-transparent rounded-b-md" />
-          )}
-        </div>
-
-        {/* Footer metadata */}
-        <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground mt-2 pt-2 border-t border-border/40">
-          {hasPrd && (
-            <div className="flex items-center gap-0.5">
-              <FileText size={10} />
-              PRD
-            </div>
-          )}
-          {attachmentCount > 0 && (
-            <div className="flex items-center gap-0.5">
-              <Paperclip size={10} />
-              {attachmentCount}
-            </div>
-          )}
-          {owner && <div className="truncate">· {owner.name}</div>}
-          {org && <div className="truncate">· {org.name}</div>}
-        </div>
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div
-      layout
-      onClick={onClick}
-      whileHover={{ y: -1 }}
-      className="cursor-pointer w-full text-left bg-card border border-border/40 rounded-xl p-3 hover:border-primary/40 hover:shadow-sm transition-all"
-    >
-      <div className="font-semibold text-sm line-clamp-2 mb-1">{feature.title}</div>
-      {feature.description && (
-        <div className="text-xs text-muted-foreground line-clamp-2 mb-2">{feature.description}</div>
-      )}
-      <div className="flex items-center gap-2 flex-wrap text-[10px] text-muted-foreground">
-        {hasPrd && (
-          <div className="flex items-center gap-0.5">
-            <FileText size={10} />
-            PRD
-          </div>
-        )}
-        {attachmentCount > 0 && (
-          <div className="flex items-center gap-0.5">
-            <Paperclip size={10} />
-            {attachmentCount}
-          </div>
-        )}
-        {owner && <div className="truncate">· {owner.name}</div>}
-        {org && <div className="truncate">· {org.name}</div>}
-      </div>
-    </motion.div>
-  );
-};
-
-interface InlineChecklistRowProps {
-  item: ReturnType<typeof computeChecklist>[number];
-  onToggle: () => void;
-}
-
-const InlineChecklistRow: React.FC<InlineChecklistRowProps> = ({ item, onToggle }) => {
-  const isHeading = item.kind === "heading";
-  // Tighter indents than the modal version since space is limited inside the card.
-  const indent = isHeading
-    ? Math.max(0, (item.headingLevel ?? 2) - 2) * 8
-    : 16 + (item.indent ?? 0) * 8;
-
-  // Headings get a visual section break: background tint + slightly bigger.
-  if (isHeading) {
-    return (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        style={{ paddingLeft: `${indent + 6}px` }}
-        className={cn(
-          "w-full text-left flex items-center gap-2 py-1 pr-2 mt-2 first:mt-0 rounded-md transition-colors group",
-          "bg-muted/40 hover:bg-muted/70",
-          item.isDone && "opacity-50"
-        )}
-      >
-        <span
-          className={cn(
-            "shrink-0 w-3 h-3 rounded-sm border flex items-center justify-center transition-all",
-            item.isDone
-              ? "bg-primary border-primary text-primary-foreground"
-              : "border-muted-foreground/50 group-hover:border-primary"
-          )}
-        >
-          {item.isDone && <Check size={8} strokeWidth={3} />}
-        </span>
-        <span
-          className={cn(
-            "flex-1 font-semibold leading-snug line-clamp-2",
-            (item.headingLevel ?? 9) <= 2 && "text-xs",
-            (item.headingLevel ?? 9) === 3 && "text-[11px]",
-            (item.headingLevel ?? 0) >= 4 && "text-[10px] text-muted-foreground uppercase tracking-wide",
-            item.isDone && "line-through decoration-1"
-          )}
-          title={item.text}
-        >
-          {item.text}
-        </span>
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      style={{ paddingLeft: `${indent + 4}px` }}
-      className={cn(
-        "w-full text-left flex items-start gap-2 py-1 pr-2 rounded transition-colors group",
-        "hover:bg-muted/60",
-        item.isDone && "opacity-50"
-      )}
-    >
-      <span
-        className={cn(
-          "shrink-0 mt-[3px] w-3.5 h-3.5 rounded border flex items-center justify-center transition-all",
-          item.isDone
-            ? "bg-primary border-primary text-primary-foreground"
-            : "border-muted-foreground/40 group-hover:border-primary"
-        )}
-      >
-        {item.isDone && <Check size={9} strokeWidth={3} />}
-      </span>
-      <div className="flex-1 min-w-0 flex items-start gap-2">
-        {item.identifier && (
-          <span
-            className={cn(
-              "shrink-0 text-[10px] font-bold tabular-nums tracking-tight text-primary mt-[1px]",
-              item.isDone && "line-through decoration-1"
-            )}
-          >
-            {item.identifier}
-          </span>
-        )}
-        <span
-          className={cn(
-            "flex-1 text-[11px] leading-snug line-clamp-2 min-w-0",
-            item.isDone && "line-through decoration-1"
-          )}
-          title={item.identifier ? `${item.identifier} — ${item.text}` : item.text}
-        >
-          {item.text}
-        </span>
-        {item.meta && (
-          <span
-            className={cn(
-              "shrink-0 text-[9px] font-medium px-1.5 py-[1px] rounded bg-muted/70 text-muted-foreground tabular-nums whitespace-nowrap mt-[1px]",
-              item.isDone && "opacity-60"
-            )}
-          >
-            {item.meta}
-          </span>
         )}
       </div>
-    </button>
+
+      <NewFeatureModal isOpen={createOpen} onClose={() => setCreateOpen(false)} onCreated={() => setCreateOpen(false)} />
+    </>
   );
 };
 
@@ -532,6 +350,9 @@ interface NewFeatureModalProps {
   onClose: () => void;
   onCreated: (id: string) => void;
 }
+
+const STATUS_ORDER: FeatureStatus[] = ["planned", "building", "shipped"];
+const NEW_STATUS_LABEL: Record<FeatureStatus, string> = { planned: "Planned", building: "Building", shipped: "Shipped" };
 
 const NewFeatureModal: React.FC<NewFeatureModalProps> = ({ isOpen, onClose, onCreated }) => {
   const { data, actions } = useData();
@@ -568,85 +389,47 @@ const NewFeatureModal: React.FC<NewFeatureModalProps> = ({ isOpen, onClose, onCr
     <Modal isOpen={isOpen} onClose={onClose} title="New feature">
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Title *</label>
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. Multi-property reservations view"
-            autoFocus
-          />
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Title *</label>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Multi-property reservations view" autoFocus />
         </div>
-
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-            Short description
-          </label>
-          <Textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="One or two lines on what this is"
-            rows={2}
-          />
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Short description</label>
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="One or two lines on what this is" rows={2} />
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Status</label>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Status</label>
             <Select value={status} onValueChange={(v) => setStatus(v as FeatureStatus)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {STATUS_ORDER.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {STATUS_META[s].label}
-                  </SelectItem>
-                ))}
+                {STATUS_ORDER.map((s) => (<SelectItem key={s} value={s}>{NEW_STATUS_LABEL[s]}</SelectItem>))}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Owner</label>
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Owner</label>
             <Select value={ownerId} onValueChange={setOwnerId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Unassigned" />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Unassigned" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="">Unassigned</SelectItem>
-                {data.users.map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.name}
-                  </SelectItem>
-                ))}
+                {data.users.map((u) => (<SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>))}
               </SelectContent>
             </Select>
           </div>
         </div>
-
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Organization</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Organization</label>
           <Select value={orgId} onValueChange={setOrgId}>
-            <SelectTrigger>
-              <SelectValue placeholder="None" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">None</SelectItem>
-              {data.organizations.map((o) => (
-                <SelectItem key={o.id} value={o.id}>
-                  {o.name}
-                </SelectItem>
-              ))}
+              {data.organizations.map((o) => (<SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>))}
             </SelectContent>
           </Select>
         </div>
-
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreate} disabled={!title.trim()}>
-            Create feature
-          </Button>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleCreate} disabled={!title.trim()}>Create feature</Button>
         </div>
       </div>
     </Modal>
