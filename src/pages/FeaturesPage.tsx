@@ -39,10 +39,13 @@ const metaFor = (s: string) => STATUS_META[s as RawStatus] ?? STATUS_META.planne
 // count those as done so progress reflects reality, not just manual ticks.
 const DONE_MARKER = /✅|🟢|☑|✔|\bshipped\b|\bdone\b|\bcomplete(d)?\b|\bmerged\b/i;
 
-// Pull a short phase tag out of the title ("Phase 2.4-B — …" → "2.4-B").
+// Pull a short phase tag out of the title — the part between "Phase" and the
+// title dash, so "Phase 2.4-B — …" → "2.4-B" and "Phase 1.1 + 1.2 — …" →
+// "1.1+1.2" (internal hyphens kept; em/en dash is the boundary, not "-").
 const phaseTag = (title: string): string | null => {
-  const m = title.match(/\bphase\s+([0-9][\w.+-]*?)(?=\s*(?:[—\-:]|$))/i);
-  return m ? m[1].replace(/[.\-+]$/, "") : null;
+  const m = title.match(/\bphase\s+(.+?)\s*[—–]/i);
+  if (!m) return null;
+  return m[1].trim().replace(/\s*\+\s*/g, "+");
 };
 
 // Grid template shared by the header and every row so columns line up.
