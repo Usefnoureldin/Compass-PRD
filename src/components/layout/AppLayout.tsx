@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Lightbulb, Ticket, CheckCircle2, Rocket, Menu, X, Users, ClipboardList, Palette, Building2, Layers, Bug, Sparkles, LogOut } from "lucide-react";
+import { LayoutDashboard, Lightbulb, Ticket, CheckCircle2, Rocket, Menu, X, Users, ClipboardList, Palette, Building2, Layers, Bug, Sparkles, LogOut, Map as MapIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/Button";
 import { ThemeToggle } from "../ui/ThemeToggle";
@@ -40,6 +40,7 @@ export const AppLayout: React.FC<SidebarProps> = ({ children }) => {
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+    { icon: MapIcon, label: "Plan", path: "/plan" },
     { icon: Sparkles, label: "Features", path: "/features" },
     { icon: Lightbulb, label: "Ideas", path: "/ideas" },
     { icon: ClipboardList, label: "Client Requirements", path: "/requirements" },
