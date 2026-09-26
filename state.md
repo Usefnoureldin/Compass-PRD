@@ -1,10 +1,10 @@
 # Project State
 
-_Last updated: 2026-06-24_
+_Last updated: 2026-09-26_
 
 ## Overview
 
-Compass is an internal product-ops tool used to track Hostbase product requirements, client requests, ideas, bugs, sprints, dev activity, and **features with PRD documents**. It started as a frontend-only Vite + React app with localStorage persistence. As of 2026-05-22 it is wired to a shared Supabase database so data survives across browsers and sessions. As of 2026-05-25 it has a Features module with markdown PRDs and `.md`/`.pdf` attachments stored in Supabase Storage. As of 2026-06-02 it is deployed on Vercel behind Google OAuth + an email allowlist, with RLS locked down, and feature cards can flow in via a CLI sync from sibling repos (`hostbase-product/features/*.md` → `compass.features`). **As of 2026-06-24 the productization plan is surfaced two ways — a read-oriented `/plan` document view and a PDF-style table on the Features board — the raw-markdown PRD modal was removed, and the Dashboard was rebuilt around a build-status overview. See [2026-06-24 changes](#2026-06-24--plan-view-features-table-dashboard-overview-v40-sync).**
+Compass is an internal product-ops tool used to track Hostbase product requirements, client requests, ideas, bugs, sprints, dev activity, and **features with PRD documents**. It started as a frontend-only Vite + React app with localStorage persistence. As of 2026-05-22 it is wired to a shared Supabase database so data survives across browsers and sessions. As of 2026-05-25 it has a Features module with markdown PRDs and `.md`/`.pdf` attachments stored in Supabase Storage. As of 2026-06-02 it is deployed on Vercel behind Google OAuth + an email allowlist, with RLS locked down, and feature cards can flow in via a CLI sync from sibling repos (`hostbase-product/features/*.md` → `compass.features`). **As of 2026-06-24 the productization plan is surfaced two ways — a read-oriented `/plan` document view and a PDF-style table on the Features board — the raw-markdown PRD modal was removed, and the Dashboard was rebuilt around a build-status overview. See [2026-06-24 changes](#2026-06-24--plan-view-features-table-dashboard-overview-v40-sync).** **As of 2026-09-26 the `compass` schema is exposed through the dashboard Data API setting — not SQL — after an outage that made every Compass client read empty. See [2026-09-26 changes](#2026-09-26--postgrest-schema-exposure-outage).**
 
 - **Repo**: `Usefnoureldin/Compass-PRD` (origin, private) — branch `main`. Upstream: `AlyLoutfy/Compass`.
 - **Production URL**: https://compass-eight-taupe.vercel.app — Vercel project `compass` under team `youssefs-projects-94b1f3d5`. Git-connected to `Usefnoureldin/Compass-PRD`; pushes to `main` trigger an auto-deploy.
@@ -143,14 +143,32 @@ Rollback for emergencies: `reconciliation/rollback_tighten_rls.sql` reopens `com
 
 ### PostgREST schema exposure
 
-The custom `compass` schema is exposed to the REST/PostgREST API via:
+The `supabase-js` client is initialised with `db: { schema: 'compass' }`, so `supabase.from('ideas')` resolves to `compass.ideas`. A non-`public` schema only answers over REST if it is on the project's **exposed schemas** list.
 
-```sql
-ALTER ROLE authenticator SET pgrst.db_schemas = 'public, graphql_public, compass, website_leads';
-NOTIFY pgrst, 'reload schema';
+**This is a dashboard setting, not SQL.** Set it at:
+
+> Dashboard → project `hostbase-website` → **Integrations → Data API → Settings → Exposed schemas**
+
+PostgREST reloads its schema cache a few seconds after saving. No migration or deploy is involved.
+
+**Current value:** `public, graphql_public, compass, website_leads`
+
+> ⚠️ This file previously documented exposure as `ALTER ROLE authenticator SET pgrst.db_schemas = '…'` + `NOTIFY pgrst, 'reload schema'`. **Do not rely on that.** Supabase manages `pgrst.db_schemas` from the platform config and overwrites role-level settings on config reload, so the statement stops taking effect without warning — which is exactly what caused the 2026-09-26 outage. Change the setting in the dashboard.
+
+Health check (anon key is fine — RLS makes `[]` the expected success response):
+
+```bash
+curl -s "$VITE_SUPABASE_URL/rest/v1/features?select=id&limit=1" \
+  -H "apikey: $VITE_SUPABASE_ANON_KEY" \
+  -H "Authorization: Bearer $VITE_SUPABASE_ANON_KEY" \
+  -H "Accept-Profile: compass"
 ```
 
-The `supabase-js` client is initialised with `db: { schema: 'compass' }` so `supabase.from('ideas')` resolves to `compass.ideas`.
+| Response | Meaning |
+| --- | --- |
+| `[]` | Healthy — schema exposed, table present, RLS filtering the anon key |
+| `PGRST106 Invalid schema: compass` | Schema not on the exposed list — the 2026-09-26 failure |
+| `PGRST205 Could not find the table` | Schema exposed but the table is missing — migrations not applied |
 
 ## Frontend storage layer
 
@@ -193,6 +211,22 @@ A UI pass to make Compass read like the productization-plan PDF, plus a v4.0 dat
 - **Bug fixes** — `FeaturesPage` kanban dropped features whose raw status wasn't planned/building/shipped (deferred/blocked vanished) → now bucketed. `FeaturesListPage` mislabeled `building` as "Pending" → now "In progress" by status.
 - **v4.0 data sync** — `hostbase-prod-plan.md` bumped to v4.0; authored phase files for the sub-phases that previously only lived in the master prose: **2.5** branding, **2.6 / 2.6b** Channex org-scoping, **2.7** NOT NULL, **2.8** isolation harness (all shipped), **2.9** custom domains (deferred), and **Phase 3 / 4 / 5** (planned, with task checklists). Phase 2 flipped `building → shipped` (critical path 2.1–2.8 complete). `compass.features` now has **28** rows under `hostbase-prod-plan` → the plan reads **23/28 shipped (82%)**.
 - **Local auth shortcut (dev only)** — a password was set on `youssef@suitespotegypt.com` via the admin API so the headless/CDP browser could sign in for screenshots; prod login is unchanged (Google OAuth). `compass.features` was added to the `supabase_realtime` publication (additive).
+
+## 2026-09-26 — PostgREST schema exposure outage
+
+Every Compass client — the Vercel app and the external CLI sync — went blind against the `compass` schema. Root cause was the project's exposed-schemas setting. No code, credential, or data problem.
+
+- **Symptom**: `sync-to-compass.ts` reported `0/67 synced, 67 failed` — *every* file failing identically rather than one bad file, which is the tell for a transport/config fault rather than content. The app read empty.
+- **Diagnosis**: any request carrying `Accept-Profile: compass` returned
+  ```
+  406  PGRST106  "Only the following schemas are exposed: public, graphql_public"
+  ```
+  Credentials resolved fine and the REST root answered. Purely the exposed-schema list.
+- **Blast radius was wider than the sync.** `src/lib/supabase.ts` sets `db: { schema: 'compass' }`, so the Vercel app and every local dev session were hitting the same wall — not just the CLI.
+- **Why this file was misleading**: [PostgREST schema exposure](#postgrest-schema-exposure) documented the mechanism as an `ALTER ROLE authenticator SET pgrst.db_schemas` statement. Supabase manages that setting from the platform config and overwrites role-level values, so the SQL had silently stopped holding. That section is now corrected.
+- **Fix**: added `compass` under **Integrations → Data API → Settings → Exposed schemas**. Roughly ten seconds to take effect.
+- **Verification**: a control probe separates the two failure modes — a deliberately nonexistent table returns `PGRST205` (absent from the schema cache) while `features`, `feature_attachments`, `requirements`, `ideas`, `bugs`, `sprints`, `users`, and `organizations` all return `[]` under the anon key. That `[]` is `compass_authed` filtering an unauthenticated request, which incidentally re-confirms the 2026-06-02 RLS tighten is live on this project.
+- **Knock-on find**: restoring `compass` revealed that **`website_leads` had also been dropped** from the exposed list, despite this file claiming otherwise since 2026-06-02 — so the hostbase.ai marketing site had been failing the same way, unnoticed. Re-exposed the same day; `website_leads.demo_requests` now answers. Final list: `public, graphql_public, compass, website_leads`.
 
 ## Authentication (added 2026-06-02)
 
@@ -257,7 +291,7 @@ Sidebar logo and favicon load from `public/brand/logos/logomark/hostbase-logomar
 ## Sibling schemas in the same Supabase project
 
 - **`public`**: empty of Compass tables (still hosts Postgres defaults and extensions).
-- **`website_leads`**: holds `demo_requests` for the hostbase.ai marketing site. Independent of Compass.
+- **`website_leads`**: holds `demo_requests` for the hostbase.ai marketing site. Independent of Compass. On the exposed-schemas list (re-exposed and verified 2026-09-26 — it had been silently dropped alongside `compass`).
 
 ## Open items / TODO
 
@@ -270,6 +304,7 @@ Sidebar logo and favicon load from `public/brand/logos/logomark/hostbase-logomar
 7. **No localStorage→Supabase backfill.** Any pre-2026-05-22 data that lived in localStorage was not migrated and is effectively lost.
 8. **Signed URLs for attachments** — `getPublicUrl()` works while RLS is gated on `authenticated`, but the URL still doesn't carry a token. Cleaner long-term is `createSignedUrl()` so attachment links can be safely shared / inspected outside the app session.
 9. **External-sync orphan handling** — if a `features/*.md` file is deleted in hostbase-product, the matching Compass row remains. Consider a `--prune` flag that diffs `external_id`s and deletes Compass rows missing from the local repo.
+10. ~~**`website_leads` is not exposed over REST.**~~ DONE 2026-09-26 — re-added to the exposed-schemas list alongside `compass`; `website_leads.demo_requests` verified answering. **Still worth doing:** nothing alerts on exposed-schemas drift, which is why both schemas were down for an unknown stretch before anyone noticed. A cheap uptime check hitting one row per exposed schema would have caught it. Also confirm `website_leads` RLS is gated the way `compass_authed` is — it is publicly reachable again and its policies have not been reviewed here.
 
 ## Recent commits (most recent first)
 
